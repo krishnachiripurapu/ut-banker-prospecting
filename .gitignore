@@ -1,3 +1,8 @@
 .search_cache.json
 __pycache__/
 *.pyc
+
+# personal data and backups
+UT_Alumni_Bankers.csv
+*.csv.bak
+*.bak

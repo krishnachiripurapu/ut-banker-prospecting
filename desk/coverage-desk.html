@@ -1,0 +1,1953 @@
+<title>Coverage Desk</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: a pitchbook sheet. Slim masthead, Excel-style sheet tabs, one working surface per tab,
+   and a contact file that slides in from the right. Blue text marks values you typed, like hardcodes in a model. */
+:root{
+  --paper:#F3F5F8; --sheet:#FFFFFF; --sheet-2:#F8F9FB; --ink:#0F1B2D; --ink-2:#465264; --ink-3:#717D91;
+  --rule:#D9DFE7; --rule-2:#E9EDF2;
+  --accent:#BF5700; --accent-2:#9E4800; --accent-soft:#FBEBDD; --on-accent:#FFFFFF;
+  --hard:#1C4ED8; --hard-soft:#E7EEFE;
+  --ok:#17784A; --ok-soft:#E0F2E8; --warn:#9A6200; --warn-soft:#FBF0D6; --crit:#BD3328; --crit-soft:#FBE4E1;
+  --scrim:rgba(15,27,45,.38);
+  --shadow:0 1px 2px rgba(15,27,45,.06),0 12px 32px rgba(15,27,45,.12);
+  --f-ui:"Archivo",Arial,Helvetica,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:6px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0C121C; --sheet:#131B27; --sheet-2:#18212F; --ink:#E6EBF2; --ink-2:#A9B4C4; --ink-3:#818DA0;
+  --rule:#273345; --rule-2:#1E2836;
+  --accent:#F08A3C; --accent-2:#FFA160; --accent-soft:#3A2414; --on-accent:#1A0E04;
+  --hard:#8EAEFF; --hard-soft:#1B2645;
+  --ok:#4CC48A; --ok-soft:#12301F; --warn:#E5AE4E; --warn-soft:#33270F; --crit:#F2766B; --crit-soft:#3A1915;
+  --scrim:rgba(0,0,0,.55); --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px rgba(0,0,0,.45);
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0C121C; --sheet:#131B27; --sheet-2:#18212F; --ink:#E6EBF2; --ink-2:#A9B4C4; --ink-3:#818DA0;
+  --rule:#273345; --rule-2:#1E2836;
+  --accent:#F08A3C; --accent-2:#FFA160; --accent-soft:#3A2414; --on-accent:#1A0E04;
+  --hard:#8EAEFF; --hard-soft:#1B2645;
+  --ok:#4CC48A; --ok-soft:#12301F; --warn:#E5AE4E; --warn-soft:#33270F; --crit:#F2766B; --crit-soft:#3A1915;
+  --scrim:rgba(0,0,0,.55); --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px rgba(0,0,0,.45);
+  color-scheme:dark}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{background:var(--paper)}
+body{font-family:var(--f-ui);font-size:14px;line-height:1.45;color:var(--ink);-webkit-font-smoothing:antialiased}
+a{color:var(--hard)}
+.wrap{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-2)}
+.faint{color:var(--ink-3)}
+h1,h2,h3{font-variation-settings:"wdth" 80;letter-spacing:-.01em;text-wrap:balance;margin:0}
+h2{font-size:22px;font-weight:760}
+h3{font-size:15px;font-weight:720}
+.eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+:focus-visible{outline:2px solid var(--hard);outline-offset:2px}
+
+/* masthead + sheet tabs */
+.mast{background:var(--sheet);border-bottom:1px solid var(--rule);position:sticky;top:env(safe-area-inset-top,0px);z-index:20}
+.mast-in{display:flex;align-items:center;gap:16px;padding-block:12px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.mark{width:30px;height:30px;border-radius:4px;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-family:var(--f-mono);font-weight:600;font-size:12px;letter-spacing:.02em;flex:none}
+.brand .name{font-weight:780;font-size:17px;font-variation-settings:"wdth" 78;letter-spacing:.01em;line-height:1.1}
+.brand .sub{font-size:11px;color:var(--ink-3)}
+.mast-actions{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap;align-items:center}
+.conns{display:flex;gap:10px;font-family:var(--f-mono);font-size:11px;color:var(--ink-2)}
+.conn{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--ink-3)}
+.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.crit{background:var(--crit)}
+.tabs-scroll{overflow-x:auto;scrollbar-width:none}
+.tabs-scroll::-webkit-scrollbar{display:none}
+.tabs{display:flex;gap:2px;align-items:flex-end;min-width:max-content}
+.tab{appearance:none;border:1px solid transparent;border-bottom:none;background:none;color:var(--ink-2);font:inherit;font-weight:620;padding:9px 14px 10px;border-radius:6px 6px 0 0;cursor:pointer;display:flex;gap:6px;align-items:center;margin-bottom:-1px}
+.tab:hover{color:var(--ink);background:var(--sheet-2)}
+.tab[aria-selected="true"]{background:var(--paper);color:var(--ink);border-color:var(--rule);box-shadow:inset 0 2px 0 var(--accent)}
+.tab .ct{font-family:var(--f-mono);font-size:11px;background:var(--accent-soft);color:var(--accent-2);border-radius:9px;padding:0 6px;min-width:18px;text-align:center}
+
+main{padding-block:20px 80px}
+.banner{border:1px solid var(--rule);background:var(--sheet);border-radius:var(--r);padding:12px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.banner.warn{background:var(--warn-soft);border-color:transparent}
+.banner.crit{background:var(--crit-soft);border-color:transparent}
+
+/* controls */
+.btn{appearance:none;font:inherit;font-weight:620;font-size:13px;border:1px solid var(--rule);background:var(--sheet);color:var(--ink);padding:7px 12px;border-radius:var(--r);cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none;white-space:nowrap;line-height:1.2}
+.btn:hover{border-color:var(--ink-3)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.primary:hover{background:var(--accent-2);border-color:var(--accent-2)}
+.btn.ghost{background:transparent}
+.btn.sm{padding:4px 9px;font-size:12px}
+.btn.danger{color:var(--crit);border-color:var(--crit)}
+.btn[disabled]{opacity:.5;cursor:default}
+.icon-btn{appearance:none;border:none;background:none;color:var(--ink-2);font-size:22px;line-height:1;cursor:pointer;padding:4px 8px;border-radius:var(--r)}
+.icon-btn:hover{background:var(--sheet-2);color:var(--ink)}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.in{font:inherit;font-size:13px;color:var(--ink);background:var(--sheet);border:1px solid var(--rule);border-radius:var(--r);padding:7px 9px;width:100%;min-width:0}
+.in:focus{border-color:var(--hard);outline:none;box-shadow:0 0 0 3px var(--hard-soft)}
+.in.hard,textarea.in,input.in[type="text"],input.in[type="email"],input.in[type="url"],input.in[type="number"],input.in[type="date"],input.in[type="datetime-local"],input.in:not([type]){color:var(--hard)}
+select.in{color:var(--ink);width:auto}
+textarea.in{resize:vertical;line-height:1.5}
+.lbl{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:var(--ink-2);min-width:0}
+.chk{display:inline-flex;gap:6px;align-items:center;font-size:13px;color:var(--ink-2);cursor:pointer}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{appearance:none;font:inherit;font-size:12px;font-weight:600;border:1px solid var(--rule);background:var(--sheet);color:var(--ink-2);border-radius:14px;padding:4px 10px;cursor:pointer;white-space:nowrap}
+.chip.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.chip .n{font-family:var(--f-mono);font-size:11px;opacity:.75;margin-left:4px}
+.tag{display:inline-block;font-size:11px;font-weight:600;border-radius:4px;padding:1px 6px;background:var(--sheet-2);border:1px solid var(--rule-2);color:var(--ink-2);white-space:nowrap}
+.tag.tie{background:var(--accent-soft);color:var(--accent-2);border-color:transparent}
+.tag.t-BB{color:var(--ink-2)}.tag.t-EB{color:var(--accent-2)}.tag.t-MM{color:var(--ink-2)}.tag.t-TX{color:var(--warn)}.tag.t-PC{color:var(--ok)}
+.rs-row{display:grid;grid-template-columns:4px minmax(0,1fr) minmax(0,1fr);gap:12px;padding:10px 12px 10px 0;border-top:1px solid var(--rule-2);align-items:start}
+.rs-row .stripe{align-self:stretch;border-radius:0 2px 2px 0;background:var(--c,var(--rule))}
+.rs-row .orig{font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
+.rs-row .sugg{font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--hard)}
+.rs-row.done .orig{color:var(--ink-3);text-decoration:line-through}
+.rs-row.kept .sugg{color:var(--ink-3);text-decoration:line-through}
+@media (max-width:620px){.rs-row{grid-template-columns:4px minmax(0,1fr)}.rs-row .sugg-col{grid-column:2}}
+.final{white-space:pre-wrap;font-size:12.5px;line-height:1.5;background:var(--sheet-2);border:1px solid var(--rule-2);border-radius:var(--r);padding:12px;max-height:620px;overflow:auto}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:620;white-space:nowrap}
+.pill::before{content:"";width:8px;height:8px;border-radius:2px;background:var(--c,var(--ink-3))}
+.g-reach{--c:var(--ink-3)}.g-wait{--c:var(--warn)}.g-engaged{--c:var(--accent)}.g-done{--c:var(--ok)}.g-closed{--c:var(--rule)}
+.src{font-family:var(--f-mono);font-size:11px;white-space:nowrap}
+.src.v{color:var(--ok)}.src.g{color:var(--warn)}.src.x{color:var(--ink-3)}
+
+/* surfaces */
+.card{background:var(--sheet);border:1px solid var(--rule);border-radius:var(--r)}
+.card-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:14px 16px 10px;flex-wrap:wrap}
+.card-b{padding:0 16px 16px}
+.stack{display:flex;flex-direction:column;gap:16px;min-width:0}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+@media (max-width:900px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.hint{font-size:12px;color:var(--ink-3);margin:6px 0 0}
+.empty{padding:28px 16px;text-align:center;color:var(--ink-2)}
+.empty h3{margin-bottom:6px;color:var(--ink)}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.toolbar .grow{flex:1 1 220px;min-width:0}
+.section-title{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+
+/* tables */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--rule);border-radius:var(--r);background:var(--sheet)}
+table.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;font-family:var(--f-mono);font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);padding:9px 10px;border-bottom:1px solid var(--rule);background:var(--sheet-2);white-space:nowrap;position:sticky;top:0}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--rule-2);vertical-align:top}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr.click{cursor:pointer}
+.tbl tr.click:hover td{background:var(--sheet-2)}
+.tbl .nm{font-weight:660}
+.tbl .sub{font-size:12px;color:var(--ink-2)}
+.tbl .num{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.tbl td.cb,.tbl th.cb{width:30px}
+
+/* today */
+.kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--rule-2)}
+.kpi{background:var(--sheet);padding:12px 14px}
+.kpi .v{font-family:var(--f-mono);font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1}
+.kpi .v small{font-size:13px;color:var(--ink-3);font-weight:500}
+.kpi .l{font-size:12px;color:var(--ink-2);margin-top:2px}
+.meter{height:4px;background:var(--rule-2);border-radius:2px;margin-top:8px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--accent)}
+.funnel{display:flex;height:12px;border-radius:3px;overflow:hidden;background:var(--rule-2);margin:4px 0 10px}
+.funnel i{display:block;height:100%;background:var(--c)}
+.legend{display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:12px}
+.todo{display:flex;flex-direction:column}
+.todo-row{display:grid;grid-template-columns:4px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 16px 10px 0;border-top:1px solid var(--rule-2)}
+.todo-row:first-child{border-top:none}
+.todo-row .stripe{align-self:stretch;border-radius:0 2px 2px 0;background:var(--c,var(--rule))}
+.todo-row .what{min-width:0}
+.todo-row .who{font-weight:660;cursor:pointer}
+.todo-row .who:hover{text-decoration:underline}
+.todo-row .meta{font-size:12px;color:var(--ink-2)}
+.sev-crit{--c:var(--crit)}.sev-warn{--c:var(--warn)}.sev-ok{--c:var(--ok)}.sev-info{--c:var(--ink-3)}.sev-hot{--c:var(--accent)}
+.group-h{padding:14px 16px 6px;display:flex;justify-content:space-between;align-items:baseline;gap:10px;border-top:1px solid var(--rule)}
+.group-h:first-child{border-top:none}
+.steps{counter-reset:s;display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.steps li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--rule-2);border-radius:var(--r);background:var(--sheet-2)}
+.steps li::before{counter-increment:s;content:counter(s);font-family:var(--f-mono);font-weight:600;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent-2);font-size:12px}
+
+/* drawer */
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:40}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(600px,100%);background:var(--sheet);border-left:1px solid var(--rule);box-shadow:var(--shadow);z-index:41;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 16px) max(20px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 40px) 20px}
+.dr-head{display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.dr-head h2{margin:2px 0}
+.dr-bar{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin:14px 0}
+.next{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 14px;border-radius:var(--r);background:var(--sheet-2);border-left:4px solid var(--c,var(--rule));margin-bottom:6px;flex-wrap:wrap}
+.dr-sec{border-top:1px solid var(--rule);padding-top:16px;margin-top:16px;display:flex;flex-direction:column;gap:10px}
+.dr-sec h3{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.field-row{display:flex;gap:8px;align-items:center}
+.seg{display:flex;flex-wrap:wrap;gap:4px}
+.seg-b{appearance:none;font:inherit;font-size:12px;font-weight:600;padding:5px 9px;border-radius:var(--r);border:1px solid var(--rule);background:var(--sheet);color:var(--ink-2);cursor:pointer}
+.seg-b.on{border-color:var(--accent);color:var(--accent-2);background:var(--accent-soft)}
+.prep{white-space:pre-wrap;font-size:13px;background:var(--sheet-2);border-radius:var(--r);padding:12px;border:1px solid var(--rule-2)}
+.log{display:flex;flex-direction:column;gap:4px;font-size:12px}
+.log div{display:grid;grid-template-columns:64px minmax(0,1fr);gap:8px}
+.kv{display:grid;grid-template-columns:110px minmax(0,1fr);gap:6px 12px;font-size:13px}
+.kv dt{color:var(--ink-3);font-size:12px}
+.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+details summary{cursor:pointer;color:var(--ink-2);font-size:12px;font-weight:600}
+.pretext{white-space:pre-wrap;font-size:12px;color:var(--ink-2);max-height:240px;overflow:auto;background:var(--sheet-2);padding:10px;border-radius:var(--r);margin-top:6px}
+
+/* modal */
+.modal{position:fixed;inset:0;z-index:50;background:var(--scrim);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 40px) max(16px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 40px) max(16px,env(safe-area-inset-left,0px))}
+.modal-card{background:var(--sheet);border-radius:8px;box-shadow:var(--shadow);width:min(760px,100%);padding:20px;display:flex;flex-direction:column;gap:14px}
+.modal-card .hd{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.progress-list{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:13px}
+.progress-list li{display:flex;gap:8px;align-items:center}
+.progress-list li::before{content:"";width:10px;height:10px;border-radius:50%;border:2px solid var(--rule);flex:none}
+.progress-list li.run::before{border-color:var(--accent);border-top-color:transparent;animation:spin .8s linear infinite}
+.progress-list li.done::before{background:var(--ok);border-color:var(--ok)}
+.progress-list li.fail::before{background:var(--crit);border-color:var(--crit)}
+.progress-list li.skip{color:var(--ink-3)}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.progress-list li.run::before{animation:none}}
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.form-grid .full{grid-column:1/-1}
+.form-grid.four{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:900px){.form-grid.four{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:620px){.form-grid,.form-grid.four{grid-template-columns:minmax(0,1fr)}}
+
+/* toasts + bulk bar */
+.toasts{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(env(safe-area-inset-bottom,0px) + 16px);z-index:60;display:flex;flex-direction:column;gap:8px;align-items:flex-end;max-width:min(440px,calc(100% - 32px))}
+.toast{background:var(--ink);color:var(--paper);padding:10px 14px;border-radius:var(--r);font-size:13px;box-shadow:var(--shadow);display:flex;gap:10px;align-items:center}
+.toast a{color:inherit;font-weight:700}
+.toast.crit{background:var(--crit);color:#fff}
+.toast.warn{background:var(--warn-soft);color:var(--ink);border:1px solid var(--warn)}
+.bulkbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 16px);z-index:55;background:var(--sheet);border:1px solid var(--rule);box-shadow:var(--shadow);border-radius:8px;padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;max-width:calc(100% - 32px)}
+.bulkbar .meter{width:140px;margin:0}
+.skel{height:14px;border-radius:3px;background:var(--rule-2);margin:10px 16px}
+</style>
+
+<header class="mast">
+  <div class="wrap mast-in">
+    <div class="brand"><span class="mark" aria-hidden="true">CD</span><div><div class="name">Coverage Desk</div><div class="sub mono" id="mastSub">Networking and recruiting desk</div></div></div>
+    <div class="mast-actions">
+      <div class="conns" id="conns"></div>
+      <button class="btn" data-act="bulkOpen">Bulk add</button>
+      <button class="btn primary" data-act="pasteOpen">Paste LinkedIn profile</button>
+    </div>
+  </div>
+  <div class="wrap tabs-scroll"><nav class="tabs" id="tabs" role="tablist"></nav></div>
+</header>
+<main class="wrap" id="main"></main>
+<div class="scrim" id="scrim" hidden data-act="closeDrawer"></div>
+<aside class="drawer" id="drawer" hidden aria-label="Contact file"></aside>
+<div class="modal" id="modal" hidden><div class="modal-card" id="modalCard" role="dialog" aria-modal="true"></div></div>
+<div class="bulkbar" id="bulkbar" hidden></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+"use strict";
+/* ---------- reference data ---------- */
+const LIB = [
+  ["gs","Goldman Sachs","BB","goldmansachs.com","gs.com","first.last","common",["goldman"]],
+  ["ms","Morgan Stanley","BB","morganstanley.com","morganstanley.com","first.last","common",["morgan stanley"]],
+  ["jpm","J.P. Morgan","BB","jpmorganchase.com","jpmorgan.com","first.last","common",["j\\.?\\s?p\\.?\\s?morgan","jpmorgan"]],
+  ["bofa","BofA Securities","BB","bankofamerica.com","bofa.com","first.last","common",["bank of america","\\bbofa\\b"]],
+  ["citi","Citi","BB","citi.com","citi.com","first.last","common",["\\bciti(group|bank)?\\b"]],
+  ["barclays","Barclays","BB","barclays.com","barclays.com","first.last","common",["barclays"]],
+  ["wf","Wells Fargo","BB","wellsfargo.com","wellsfargo.com","first.last","common",["wells fargo"]],
+  ["db","Deutsche Bank","BB","db.com","db.com","first.last","common",["deutsche bank"]],
+  ["ubs","UBS","BB","ubs.com","ubs.com","first.last","common",["\\bubs\\b"]],
+  ["rbc","RBC Capital Markets","BB","rbccm.com","rbccm.com","first.last","common",["\\brbc\\b"]],
+  ["evr","Evercore","EB","evercore.com","evercore.com","first.last","common",["evercore"]],
+  ["laz","Lazard","EB","lazard.com","lazard.com","first.last","common",["lazard"]],
+  ["moelis","Moelis & Company","EB","moelis.com","moelis.com","first.last","common",["moelis"]],
+  ["pjt","PJT Partners","EB","pjtpartners.com","pjtpartners.com","first.last","verify",["\\bpjt\\b"]],
+  ["cvp","Centerview Partners","EB","centerview.com","centerview.com","flast","verify",["centerview"]],
+  ["pwp","Perella Weinberg","EB","pwpartners.com","pwpartners.com","flast","verify",["perella"]],
+  ["gugg","Guggenheim Securities","EB","guggenheimpartners.com","guggenheimpartners.com","first.last","verify",["guggenheim"]],
+  ["qatalyst","Qatalyst Partners","EB","qatalyst.com","qatalyst.com","first.last","verify",["qatalyst"]],
+  ["roth","Rothschild & Co","EB","rothschildandco.com","rothschildandco.com","first.last","common",["rothschild"]],
+  ["hl","Houlihan Lokey","MM","hl.com","hl.com","flast","common",["houlihan"]],
+  ["jef","Jefferies","MM","jefferies.com","jefferies.com","flast","common",["jefferies"]],
+  ["wb","William Blair","MM","williamblair.com","williamblair.com","flast","common",["william blair"]],
+  ["hw","Harris Williams","MM","harriswilliams.com","harriswilliams.com","flast","verify",["harris williams"]],
+  ["baird","Baird","MM","rwbaird.com","rwbaird.com","flast","verify",["\\bbaird\\b"]],
+  ["lincoln","Lincoln International","MM","lincolninternational.com","lincolninternational.com","flast","verify",["lincoln international"]],
+  ["piper","Piper Sandler","MM","pipersandler.com","psc.com","first.last","verify",["piper sandler"]],
+  ["rj","Raymond James","MM","raymondjames.com","raymondjames.com","first.last","common",["raymond james"]],
+  ["stephens","Stephens","MM","stephens.com","stephens.com","first.last","verify",["^stephens\\b","stephens inc"]],
+  ["bmo","BMO Capital Markets","MM","bmo.com","bmo.com","first.last","common",["\\bbmo\\b"]],
+  ["mizuho","Mizuho Americas","MM","mizuhoamericas.com","mizuhogroup.com","first.last","verify",["mizuho"]],
+  ["truist","Truist Securities","MM","truist.com","truist.com","first.last","verify",["truist"]],
+  ["bx","Blackstone Credit","PC","blackstone.com","blackstone.com","first.last","common",["blackstone"]],
+  ["apollo","Apollo","PC","apollo.com","apollo.com","flast","verify",["apollo global","^apollo\\b"]],
+  ["ares","Ares Management","PC","aresmgmt.com","aresmgmt.com","flast","common",["\\bares\\b"]],
+  ["owl","Blue Owl Capital","PC","blueowl.com","blueowl.com","first.last","verify",["blue owl"]],
+  ["hps","HPS Investment Partners","PC","hpspartners.com","hpspartners.com","first.last","verify",["\\bhps\\b"]],
+  ["golub","Golub Capital","PC","golubcapital.com","golubcapital.com","flast","verify",["golub"]],
+  ["sixth","Sixth Street","PC","sixthstreet.com","sixthstreet.com","flast","verify",["sixth street"]],
+  ["kkr","KKR Credit","PC","kkr.com","kkr.com","first.last","common",["\\bkkr\\b"]],
+  ["oaktree","Oaktree Capital","PC","oaktreecapital.com","oaktreecapital.com","flast","verify",["oaktree"]],
+  ["carlyle","Carlyle Global Credit","PC","carlyle.com","carlyle.com","first.last","common",["carlyle"]],
+  ["antares","Antares Capital","PC","antares.com","antares.com","first.last","verify",["antares"]],
+  ["monroe","Monroe Capital","PC","monroecap.com","monroecap.com","flast","verify",["monroe capital"]],
+  ["churchill","Churchill Asset Mgmt","PC","churchillam.com","churchillam.com","first.last","verify",["churchill asset"]],
+  ["mainst","Main Street Capital","PC","mainstcapital.com","mainstcapital.com","flast","verify",["main street capital"]],
+  ["crestline","Crestline Investors","PC","crestlineinvestors.com","crestlineinvestors.com","first.last","verify",["crestline"]],
+].map(([id,name,type,domain,mail,pat,conf,m])=>({id,name,type,domain,mail,pat,conf,m}));
+const TYPES = {BB:"Bulge bracket",EB:"Elite boutique",MM:"Middle market",TX:"Texas & regional",PC:"Private credit"};
+/* Official student/careers pages and timing, from each firm's site as of October 2026. */
+const CAREERS = {
+  gs:["https://www.goldmansachs.com/careers/students/","9 to 10 week summer analyst program. Applications open in stages by division and region, with up to 4 division and location choices per cycle."],
+  ms:["https://www.morganstanley.com/people-opportunities/students-graduates","Early Insights is a virtual program for first and second-years. North America recruiting inbox: MSCampusRecruiting@MorganStanley.com."],
+  jpm:["https://www.jpmorganchase.com/careers/explore-opportunities/programs/investment-banking-summer-analyst","Sophomore routes: Career.edYOU Academy (virtual, fall) and the 5-week paid JPMorganChase Fellowship. IB summer analyst runs 9 weeks."],
+  bofa:["https://careers.bankofamerica.com/en-us/students","Has run a sophomore IB track: two 10-week internships over consecutive summers."],
+  citi:["https://jobs.citi.com/early-career-programs-internships","Summer analyst applications usually open in September, about nine months before the internship."],
+  barclays:["https://search.jobs.barclays/","2027 banking summer analyst postings (Houston, New York) went live in August 2026. Search the board for the 2028 class."],
+  wf:["https://www.wellsfargojobs.com/en/early-careers/","Some 2027 postings closed in late September or mid-October 2026. Watch for 2028 postings."],
+  db:["https://careers.db.com/students-graduates/insight-programmes/us/develop","Sophomores: Develop with Deutsche Bank (US, two days) takes applications Oct 5 to Nov 4, 2026. Internship listings open late July to mid-December."],
+  ubs:["https://www.ubs.com/global/en/careers/early-careers/americas.html","Americas summer internship and graduate programs. Join the Junior Talent community for updates."],
+  rbc:["https://www.rbccm.com/en/careers/co-op-internships","US summer analyst program is 10 weeks for rising seniors. Postings typically go live August to October."],
+  evr:["https://www.evercore.com/careers/","10-week summer analyst program in advisory and M&A. Most full-time hires come from it."],
+  laz:["https://www.lazard.com/careers/students/our-opportunities/financial-advisory-internships","US summer analyst recruiting targets sophomores. Apply through your school or Lazard's site."],
+  moelis:["https://www.moelis.com/careers/explore-opportunities/","US summer analyst applications typically open in December of sophomore year. The sophomore Leadership Development Program can lead to an interview."],
+  pjt:["https://www.pjtpartners.com/careers/students","US summer analyst applications generally open in spring the year before and close before summer. Includes a Suited assessment."],
+  cvp:["https://www.centerview.com/careers","Summer internship for college juniors. Recruits on campus and in the market."],
+  pwp:["https://pwpartners.com/careers/intern-graduate-recruitment/","US summer analysts are recruited in the winter. Offices include Houston."],
+  gugg:["https://www.guggenheimsecurities.com/careers","Sophomore FOCUS program. Finishers are eligible to interview the next summer."],
+  qatalyst:["https://qatalyst.com/contact/","Openings are listed on the contact page. US contact: USCareers@qatalyst.com."],
+  roth:["https://www.rothschildandco.com/en/careers/students-and-graduates/internships/","Up to seven applications globally per cycle."],
+  hl:["https://hl.com/careers/early-careers/internships-united-states/","10-week US summer program for juniors and first-year MBAs."],
+  jef:["https://www.jefferies.com/careers/students-and-graduates/","10-week summer program for analysts and associates."],
+  wb:["https://www.williamblair.com/Careers/Campus-Recruiting/Investment-Banking","9-week summer analyst program for rising seniors. Bridge program for non-finance majors."],
+  hw:["https://www.harriswilliams.com/careers/summer-analyst","Summer 2028 application window: October 2026 to January 2027. Open now."],
+  baird:["https://www.bairdcareers.com/internships/global-investment-banking-intern-program-us/","Recruits sophomores for the post-junior-year internship. Applications typically open in late December. Houston is one location."],
+  lincoln:["https://www.lincolninternational.com/careers-and-culture/careers/students/","Analyst internships for students between third and fourth year."],
+  piper:["https://www.pipersandler.com/careers/students/hiring-timelines","Last cycle the IB summer analyst application opened in January with a February deadline."],
+  rj:["https://www.raymondjames.com/careers/early-career-experience/investment-banking-summer-analyst-and-career-development-programs","Sophomore IB insights bootcamp (3.5 GPA minimum). Summer analyst applications July to August."],
+  stephens:["https://www.stephens.com/careers/students-and-graduates/investment-banking-summer-analyst-program","Summer analyst applications open in early January and close toward the end of January."],
+  bmo:["https://jobs.bmo.com/us/en/student-events-us","Fall 2026 virtual series for second-years on Summer 2028 internships. US summer analyst recruiting runs December to March."],
+  mizuho:["https://www.mizuhogroup.com/americas/careers/campus-recruiting","10-week banking summer analyst program with M&A and Restructuring tracks, including Houston. Apply through Handshake or your career office."],
+  truist:["https://careers.truist.com/us/en/urstudentinternship","10-week IB summer analyst program. Most interns sit in Atlanta."],
+  bx:["https://www.blackstone.com/careers/students/","Juniors apply. Postings go up January to March and US interviews begin in February."],
+  apollo:["https://careersatapollo.apollo.com/careers","Summer roles are posted in the fall for the following summer."],
+  ares:["https://www.aresmgmt.com/about-ares-management-corporation/careers-at-ares","Early careers covers Credit and other platforms. Job board at jobs.aresmgmt.com."],
+  owl:["https://www.blueowl.com/careers",""],
+  hps:["https://www.hpspartners.com/careers",""],
+  golub:["","No public campus page found. Search LinkedIn or Handshake for Golub internships."],
+  sixth:["https://sixthstreet.com/careers/","Early Insights in spring for first and second-years. 10-week internship for rising seniors."],
+  kkr:["https://www.kkr.com/careers/student-careers","Summer analyst, MBA and full-time analyst programs. KKR Collective for liberal-arts majors."],
+  oaktree:["https://www.oaktreecapital.com/careers","10-week summer program. Many interns come through partners like SEO."],
+  carlyle:["https://www.carlyle.com/careers",""],
+  antares:["https://www.antares.com/careers",""],
+  monroe:["https://monroecap.com/careers-2/","Has run a private credit summer analyst role. Contact careers@monroecap.com."],
+  churchill:["","No careers page found. Churchill is part of Nuveen."],
+  mainst:["https://www.mainstcapital.com/contact/careers/investment-analysts","Houston lower-middle-market lender hiring summer and full-time investment analysts."],
+  crestline:["https://www.crestlineinvestors.com/careers/","Fort Worth credit manager. Has hired interns into full-time roles."],
+};
+const INDEED_Q = {gs:"Goldman Sachs",jpm:"JPMorgan",bofa:"Bank of America",citi:"Citi",rbc:"RBC Capital Markets",moelis:"Moelis",pwp:"Perella Weinberg",gugg:"Guggenheim Securities",bx:"Blackstone",owl:"Blue Owl",hps:"HPS Investment Partners",kkr:"KKR",carlyle:"Carlyle",oaktree:"Oaktree Capital",churchill:"Churchill Asset Management",mainst:"Main Street Capital",crestline:"Crestline Investors",mizuho:"Mizuho",truist:"Truist Securities",bmo:"BMO Capital Markets",roth:"Rothschild",cvp:"Centerview Partners",apollo:"Apollo Global Management",ares:"Ares Management",sixth:"Sixth Street",antares:"Antares Capital",monroe:"Monroe Capital"};
+const JRX = {
+  intern:/\b(intern|internship|summer|co-?op|insight|sophomore|freshman|fellowship|early careers?)\b/i,
+  excl:/\b(audit|compliance|engineer\w*|developer|software|technologist|operations|ops|human resources|recruit\w*|legal|counsel|paralegal|assistant|administrative|receptionist|wealth|tax|accountant|accounting|controller|data|security|facilities|marketing|sales|trader|trading|risk|kyc|aml|cyber|payroll|investor relations|client service|fund administration|reporting|treasury|research)\b/i,
+  pcStrong:/\b(private credit|direct lending|private debt|clo|asset[- ]based|specialty finance|special situations|opportunistic credit)\b/i,
+  ib:/\b(investment bank\w*|ib|m&a|mergers|advisory|capital markets|ecm|dcm|leveraged finance|levfin|restructuring|coverage|financial institutions|fig|tmt|sponsors?|capital solutions|corporate finance|private capital|strategic|generalist)\b/i,
+  pc:/\b(credit|lending|loans?|debt|underwrit\w*|distressed|mezzanine)\b/i,
+};
+function classifyJob(title,firm){
+  const t=String(title||""), intern=JRX.intern.test(t); let cat="other";
+  if(!JRX.excl.test(t)){ if(JRX.pcStrong.test(t)) cat="PC"; else if(JRX.ib.test(t)) cat=firm?.type==="PC"?"PC":"IB"; else if(JRX.pc.test(t)) cat="PC"; else if(intern&&/analyst|associate/i.test(t)) cat=firm?.type==="PC"?"PC":"IB"; }
+  const level=intern?"Intern":/vice president|\bvp\b|director|principal|managing director|partner/i.test(t)?"VP+":/associate/i.test(t)?"Associate":/analyst/i.test(t)?"Analyst":"";
+  return {cat,level};
+}
+const STAGES = [
+  {id:"lead",label:"Lead",g:"reach"},{id:"drafted",label:"Draft in Gmail",g:"reach"},
+  {id:"emailed",label:"Emailed",g:"wait"},{id:"fu1",label:"Followed up",g:"wait"},{id:"fu2",label:"Final nudge sent",g:"wait"},
+  {id:"replied",label:"Replied",g:"engaged"},{id:"scheduled",label:"Call set",g:"engaged"},
+  {id:"talked",label:"Talked",g:"done"},{id:"thanked",label:"Thanked",g:"done"},{id:"advocate",label:"Advocate",g:"done"},
+  {id:"closed",label:"Closed",g:"closed"},
+];
+const GROUPS = [{id:"reach",label:"To reach"},{id:"wait",label:"Waiting on reply"},{id:"engaged",label:"Engaged"},{id:"done",label:"Relationship"},{id:"closed",label:"Closed"}];
+const KIND = {cold:"Cold email",referral:"Referral",fu1:"Follow-up 1",fu2:"Final follow-up",thanks:"Thank-you",checkin:"Check-in"};
+const PATS = {
+  "first.last":(f,l)=>f+"."+l, "flast":(f,l)=>f[0]+l, "firstlast":(f,l)=>f+l, "f.last":(f,l)=>f[0]+"."+l,
+  "first":(f,l)=>f, "first_last":(f,l)=>f+"_"+l, "last":(f,l)=>l, "firstl":(f,l)=>f+l[0], "last.first":(f,l)=>l+"."+f, "lastf":(f,l)=>l+f[0],
+};
+const PAT_ORDER = Object.keys(PATS);
+const ROLES = {
+  ib:{label:"IB analysts & associates",t:["Investment Banking Analyst","Investment Banking Associate"]},
+  sa:{label:"Summer analysts (current & incoming)",t:["Investment Banking Summer Analyst","Summer Analyst"]},
+  senior:{label:"VP and above",t:["Vice President","Director","Managing Director"]},
+  pc:{label:"Private credit team",t:["Private Credit Analyst","Private Credit Associate","Direct Lending Associate","Credit Investment Analyst"]},
+  any:{label:"Anyone at the firm",t:[]},
+};
+const LOCS = {"":"Anywhere","Texas":"Texas","New York":"New York","California":"California","Illinois":"Illinois","Massachusetts":"Massachusetts"};
+const JOB_PRESETS = [
+  {id:"ib-sa",label:"IB summer analyst",q:"investment banking summer analyst",type:"internship"},
+  {id:"ib-early",label:"Sophomore / early insight",q:"sophomore investment banking",type:"internship"},
+  {id:"pc-sa",label:"Private credit intern",q:"private credit intern",type:"internship"},
+  {id:"dl",label:"Direct lending intern",q:"direct lending intern",type:"internship"},
+  {id:"ib-ft",label:"IB analyst",q:"investment banking analyst",type:""},
+  {id:"pc-ft",label:"Private credit analyst",q:"private credit analyst",type:""},
+  {id:"lf",label:"Leveraged finance / restructuring",q:"leveraged finance restructuring analyst",type:""},
+  {id:"ma",label:"M&A analyst",q:"mergers and acquisitions analyst",type:""},
+];
+const JOB_LOCS = ["New York, NY","Houston, TX","Dallas, TX","Austin, TX","San Francisco, CA","Chicago, IL"];
+const APP_STATUS = ["Watching","Open","Applied","Online test","HireVue","Superday","Offer","Rejected","Withdrawn"];
+const DEFAULT_PROFILE = {
+  name:"", school:"UT Austin McCombs", schoolNames:["The University of Texas at Austin","The University of Texas at Austin - Red McCombs School of Business","McCombs School of Business"],
+  schoolKeyword:"McCombs", linkedinSchool:"university-of-texas-at-austin", year:"Sophomore", gradYear:"", major:"Finance",
+  focus:"investment banking and private credit", ties:["UT Austin / McCombs"], availability:"",
+  followUpDays:6, dailyCap:20, dailyLeadGoal:50, resumeText:"", resume:null, utSignoff:true,
+};
+const DAY = 864e5;
+const EMAIL_RE = /[A-Z0-9._%+'-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+const EMAIL_RE_G = /[A-Z0-9._%+'-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+
+/* ---------- state ---------- */
+const S = {
+  db:null, mcp:null, sample:null, assets:null, downloads:null, perms:null, booted:false,
+  ready:{contacts:false,targets:false,apps:false,profile:false,jobs:false},
+  contacts:{}, targets:{}, apps:{}, profile:null, answers:null,
+  tab:(()=>{const h=(location.hash||"").slice(1);return ["today","find","pipeline","firms","jobs","apps","resume","setup"].includes(h)?h:"today";})(),
+  open:null, kind:{}, drafts:{}, busy:{}, confirmDel:null, sendAsk:null,
+  sel:new Set(),
+  find:{role:"ib",loc:"",firms:null,showAll:false,results:[],pages:[],running:false,errs:[],picked:new Set(),done:false},
+  jobs:{presets:new Set(["ib-sa","pc-sa"]),locs:new Set(["New York, NY","Houston, TX","Dallas, TX"]),onlyTargets:false,ibpcOnly:true,results:[],running:false,errs:[],done:false,view:"ibpc",firm:"",pulling:false,pullErrs:[],autoPulled:false},
+  firmJobs:{},
+  pf:{q:"",group:"all",firm:"",sort:"due"},
+  disc:{kind:"ib",text:"",place:"Houston",size:"",results:[],taskId:null,hasMore:false,running:false,err:"",picked:new Set()},
+  rs:{lines:[],overall:null,keywords:[],running:false,target:"general",jd:"",busyLine:null},
+  lastRun:null,
+  ff:{type:"all",show:"targets"},
+  conn:{}, lastSync:lsGet("cd.lastSync",0), syncing:false, autoSynced:false, bulk:null, idx:{byFirm:{},pat:{}},
+};
+let FIRMS = LIB.map(f=>({...f,rx:f.m.map(p=>new RegExp(p,"i"))}));
+
+/* ---------- utils ---------- */
+function lsGet(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v);}catch{return d;}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const safeUrl = u => /^https:\/\/[^\s"'<>]+$/i.test(String(u||"").trim()) ? String(u).trim() : "";
+const $ = (s,r=document)=>r.querySelector(s);
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+const chunks = (a,n)=>{const o=[];for(let i=0;i<a.length;i+=n)o.push(a.slice(i,i+n));return o;};
+const P = () => ({...DEFAULT_PROFILE, ...(S.profile||{})});
+const stageOf = id => STAGES.find(s=>s.id===id) || STAGES[0];
+const startOfDay = (t=Date.now()) => {const d=new Date(t);d.setHours(0,0,0,0);return d.getTime();};
+function fmtDate(t){ if(!t) return ""; const d=new Date(t); return d.toLocaleDateString("en-US",{month:"short",day:"numeric"}); }
+function fmtDT(t){ if(!t) return ""; return new Date(t).toLocaleString("en-US",{weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}); }
+function ago(t){ if(!t) return "never"; const m=Math.round((Date.now()-t)/6e4); if(m<1) return "just now"; if(m<60) return m+" min ago"; const h=Math.round(m/60); if(h<24) return h+" h ago"; return Math.round(h/24)+" d ago"; }
+function dueText(t){ if(t==null) return ""; const d=Math.round((startOfDay(t)-startOfDay())/DAY); if(d===0) return "today"; if(d<0) return `${-d}d overdue`; if(d===1) return "tomorrow"; return `in ${d}d`; }
+function tPlus(t){ if(!t) return ""; return "T+"+Math.max(0,Math.floor((Date.now()-t)/DAY)); }
+function toLocalInput(t){ if(!t) return ""; const d=new Date(t); const p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }
+function normName(s){ return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z]/g,""); }
+function splitName(full){
+  const s = String(full||"").replace(/\(.*?\)/g," ").replace(/,.*$/,"").replace(/\b(CFA|CPA|CAIA|MBA|PhD|Jr\.?|Sr\.?|II|III|IV)\b/gi," ").replace(/\s+/g," ").trim();
+  const p = s.split(" ").filter(Boolean);
+  return {first:p[0]||"", last:p.length>1?p[p.length-1]:""};
+}
+function slug(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,100); }
+function liSlug(url){ const m=String(url||"").match(/linkedin\.com\/in\/([^/?#\s]+)/i); if(!m) return ""; let s=m[1]; try{s=decodeURIComponent(s);}catch{} return slug(s); }
+function idFor(url,name,firm){ const s=liSlug(url); return s ? "li-"+s : "n-"+(slug(name+"-"+(firm||""))||Math.random().toString(36).slice(2)); }
+function emailIn(s){ const m=String(s||"").match(EMAIL_RE); return m?m[0].toLowerCase():""; }
+function tidy(t){ return String(t||"").replace(/\s*—\s*/g,", ").replace(/\s*–\s*/g," to ").replace(/\n{3,}/g,"\n\n").trim(); }
+function isUT(c){ const blob=[c.school,...(c.schools||[]).map(s=>s.name||s),...(c.ties||[])].join(" "); return /texas at austin|mccombs|\but austin\b|longhorn/i.test(blob); }
+function addLog(c,text){ return [{t:Date.now(),d:String(text).slice(0,200)},...(c.log||[])].slice(0,40); }
+function b64(buf){ let s=""; const u=new Uint8Array(buf); for(let i=0;i<u.length;i+=0x8000) s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000)); return btoa(s); }
+function csvCell(v){ const s=String(v??""); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }
+function parseCSV(text){
+  const rows=[]; let row=[], f="", q=false;
+  for(let i=0;i<text.length;i++){ const ch=text[i];
+    if(q){ if(ch==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; } else f+=ch; }
+    else if(ch==='"') q=true; else if(ch===","||ch==="\t"){ row.push(f); f=""; }
+    else if(ch==="\n"||ch==="\r"){ if(ch==="\r"&&text[i+1]==="\n") i++; row.push(f); rows.push(row); row=[]; f=""; }
+    else f+=ch; }
+  if(f!==""||row.length){ row.push(f); rows.push(row); }
+  return rows.filter(r=>r.some(c=>String(c).trim()!==""));
+}
+
+/* ---------- firms ---------- */
+function rebuildFirms(){
+  const out = LIB.map(f=>{ const t=S.targets[f.id]||{}; return {...f, ...(t.over||{}), on:!!t.on, tier:t.tier||2, tx:t.tx||"", mynote:t.note||"", rx:f.m.map(p=>new RegExp(p,"i"))}; });
+  for (const [id,t] of Object.entries(S.targets)) if (t.custom && t.name) {
+    const nm=String(t.name); const rx=(Array.isArray(t.m)&&t.m.length?t.m:[nm.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")]).map(p=>{try{return new RegExp(p,"i");}catch{return null;}}).filter(Boolean); out.push({id,name:nm,type:t.type||"MM",domain:t.domain||"",mail:t.mail||t.domain||"",pat:t.pat||"first.last",careers:t.careers||"",tx:t.tx||"",mynote:t.note||"",conf:"verify",on:!!t.on,tier:t.tier||2,custom:true,rx});
+  }
+  FIRMS = out;
+}
+function matchFirm(name){ const n=String(name||"").trim(); if(!n) return null; return FIRMS.find(f=>f.rx.some(r=>r.test(n))) || null; }
+function firmById(id){ return FIRMS.find(f=>f.id===id) || null; }
+function firmOf(c){ return (c.firmId && firmById(c.firmId)) || matchFirm(c.firm); }
+function trackFor(firm){ return firm?.type==="PC" ? {long:"private credit",short:"Private Credit"} : {long:"investment banking",short:"IB"}; }
+function inferPattern(email,first,last){ const local=String(email||"").toLowerCase().split("@")[0]; const f=normName(first), l=normName(last); if(!f||!l) return null; return PAT_ORDER.find(p=>PATS[p](f,l)===local) || null; }
+function buildIndex(){
+  const byFirm={}, ok={}, bad={};
+  for (const c of Object.values(S.contacts)) {
+    const f=firmOf(c); if(!f) continue; (byFirm[f.id] ||= []).push(c);
+    if (c.email && ["clay","import","replied","manual"].includes(c.emailSrc)) { const p=inferPattern(c.email,c.first,c.last); if(p){ ok[f.id] ||= {}; ok[f.id][p]=(ok[f.id][p]||0)+1; } }
+    for (const b of (c.bounced||[])) { const p=inferPattern(b,c.first,c.last); if(p){ bad[f.id] ||= {}; bad[f.id][p]=(bad[f.id][p]||0)+1; } }
+  }
+  const pat={};
+  for (const f of FIRMS) {
+    const o=ok[f.id]||{}, b=bad[f.id]||{};
+    const best=Object.entries(o).sort((x,y)=>y[1]-x[1])[0];
+    if (best) pat[f.id]={pat:best[0],why:`confirmed by ${best[1]} verified email${best[1]>1?"s":""}`,lvl:"v",bad:b};
+    else if ((b[f.pat]||0)>=2) { const alt=PAT_ORDER.find(p=>!b[p])||f.pat; pat[f.id]={pat:alt,why:`${f.pat} bounced ${b[f.pat]} times, now trying ${alt}`,lvl:"g",bad:b}; }
+    else pat[f.id]={pat:f.pat,why:f.conf==="common"?"widely reported format":"best guess, not yet confirmed",lvl:f.conf==="common"?"v":"g",bad:b};
+  }
+  S.idx={byFirm,pat};
+}
+function guessEmail(c,avoid=[]){
+  const firm=firmOf(c); const f=normName(c.first), l=normName(c.last);
+  if(!firm||!firm.mail||!f||l.length<2) return "";
+  const info=S.idx.pat[firm.id]||{pat:firm.pat,bad:{}};
+  const order=[info.pat,...PAT_ORDER.filter(p=>p!==info.pat&&!(info.bad||{})[p])];
+  const av=avoid.map(x=>String(x).toLowerCase());
+  for (const p of order){ const e=PATS[p](f,l)+"@"+firm.mail; if(!av.includes(e)) return e; }
+  return "";
+}
+
+/* ---------- capability helpers ---------- */
+const NO_DB = "Saving needs this page open in Claude.";
+function enqueue(key,fn){ const q=(enqueue.q ||= {}); const p=(q[key]||Promise.resolve()).catch(()=>{}).then(fn); q[key]=p; return p; }
+function dbErr(e){ switch(e?.code){ case "quota_exceeded": return "Storage is full. Delete closed contacts to make room."; case "invalid_argument": return "Couldn't save. You may only have view access to this page."; case "resource_exhausted": return "Too many saves at once. Wait a moment and try again."; default: return `Couldn't save (${e?.code||"error"}). Try again.`; } }
+async function saveContact(id,patch){
+  if(!S.db){ toast(NO_DB,"warn"); throw {code:"no_db"}; }
+  const exists=!!S.contacts[id]?.createdAt;
+  const clean=JSON.parse(JSON.stringify(patch));
+  const body = exists ? clean : {createdAt:Date.now(), ...clean};
+  S.contacts[id]={...(S.contacts[id]||{}),...body,id}; dataChanged();
+  const ref=S.db.collection("contacts").doc(id);
+  return enqueue("c:"+id,()=>exists?ref.update(clean):ref.set({...body})).catch(e=>{toast(dbErr(e),"crit");throw e;});
+}
+async function deleteContact(id){ if(!S.db) return toast(NO_DB,"warn"); delete S.contacts[id]; S.sel.delete(id); dataChanged(); return enqueue("c:"+id,()=>S.db.collection("contacts").doc(id).delete()).catch(e=>toast(dbErr(e),"crit")); }
+async function saveTarget(id,patch){ if(!S.db) return toast(NO_DB,"warn"); const cur=S.targets[id]||{}; const body={...cur,...JSON.parse(JSON.stringify(patch))}; S.targets[id]=body; rebuildFirms(); dataChanged(); return enqueue("t:"+id,()=>S.db.collection("targets").doc(id).set(body)).catch(e=>toast(dbErr(e),"crit")); }
+async function saveApp(id,patch){ if(!S.db) return toast(NO_DB,"warn"); const cur=S.apps[id]||{createdAt:Date.now()}; const body={...cur,...JSON.parse(JSON.stringify(patch))}; delete body.id; S.apps[id]={...body,id}; dataChanged(); return enqueue("a:"+id,()=>S.db.collection("apps").doc(id).set(body)).catch(e=>toast(dbErr(e),"crit")); }
+async function saveProfile(patch){ if(!S.db) return toast(NO_DB,"warn"); const body={...P(),...JSON.parse(JSON.stringify(patch))}; S.profile=body; dataChanged(); return enqueue("profile",()=>S.db.doc("config/profile").set(body)).catch(e=>toast(dbErr(e),"crit")); }
+async function call(server,tool,input,opts){
+  if(!S.mcp) throw {code:"no_mcp",message:"Connectors work when this page is open in Claude."};
+  const r=await S.mcp.callTool(server,tool,input,opts);
+  return r && "payload" in r ? r.payload : r;
+}
+function errText(e,server){
+  switch(e?.code){
+    case "no_mcp": return e.message;
+    case "needs_reauth": return `Reconnect ${server} in claude.ai Settings → Connectors.`;
+    case "server_not_connected": case "server_not_found": return `Add the ${server} connector in claude.ai Settings → Connectors.`;
+    case "selection_required": return `Pick which ${server} connector to use when claude.ai asks, then try again.`;
+    case "not_in_manifest": return `${server} is turned off for this page. Turn it on from the page's Permissions menu.`;
+    case "blocked_by_policy": return `Your organization blocks this ${server} tool.`;
+    case "approval_required": case "consent_required": return `${server} needs your approval. Click again and choose Allow.`;
+    case "server_unavailable": return `${server} didn't answer. Try again in a minute.`;
+    case "tool_error": return `${server}: ${String(e.message||"the request failed").slice(0,180)}`;
+    case "cancelled": return "Stopped.";
+    default: return `${server} request failed (${e?.code||"error"}).`;
+  }
+}
+function sampleErr(e){
+  switch(e?.code){
+    case "not_granted": case "sampling_disabled": case "not_declared": case "capability_disabled": return "Claude access is off for this page. Turn it on from the page's Permissions menu.";
+    case "rate_limited": return "You've hit your Claude usage limit for now. Try again later.";
+    case "refused": return "Claude declined this one. Change the input and try again.";
+    case "invalid_json": return "Claude's answer came back in the wrong format. Try again.";
+    case "prompt_too_large": return "That text is too long. Paste a shorter section.";
+    case "session_expired": return "Sign in to Claude again, then retry.";
+    case "cancelled": return "Stopped.";
+    case "no_sample": return "Writing needs this page open in Claude.";
+    default: return `Claude didn't finish (${e?.code||"error"}). Try again.`;
+  }
+}
+async function ask(prompt,opts={}){ if(!S.sample) throw {code:"no_sample"}; return S.sample(prompt,{cache:false,...opts}); }
+async function askJSON(prompt,opts={}){ if(!S.sample) throw {code:"no_sample"}; return S.sample.json(prompt,{cache:false,...opts}); }
+
+/* ---------- toasts / bulk ---------- */
+function toast(msg,kind="",link){ if(!msg) return; const el=document.createElement("div"); el.className="toast "+kind; el.innerHTML=`<span>${esc(msg)}</span>${safeUrl(link)?`<a href="${esc(link)}" target="_blank" rel="noopener">Open ↗</a>`:""}`; $("#toasts").append(el); setTimeout(()=>el.remove(), kind==="crit"?9000:5500); }
+function bulkStart(label,total){ S.bulk={label,total,done:0,stop:false,note:""}; renderBulk(); return S.bulk; }
+function bulkStep(note){ if(!S.bulk) return; S.bulk.done++; if(note) S.bulk.note=note; renderBulk(); }
+function bulkEnd(msg){ S.bulk=null; renderBulk(); if(msg) toast(msg,"ok"); }
+function renderBulk(){ const el=$("#bulkbar"); const b=S.bulk; if(!b){ el.hidden=true; return; } el.hidden=false; const pct=b.total?Math.round(100*b.done/b.total):0;
+  el.innerHTML=`<strong>${esc(b.label)}</strong><span class="mono">${b.done} / ${b.total}</span><div class="meter"><i style="width:${pct}%"></i></div><span class="faint" style="font-size:12px">${esc(b.note||"")}</span><button class="btn sm" data-act="bulkStop">${b.stop?"Stopping…":"Stop"}</button>`; }
+
+/* ---------- next actions ---------- */
+function nextAction(c,now=Date.now()){
+  const fu=(Number(P().followUpDays)||6)*DAY;
+  switch(c.stage||"lead"){
+    case "lead": return c.email ? {label:"Write the cold email",due:c.createdAt||now,sev:"info",act:"compose",kind:c.referrer?"referral":"cold"} : {label:"Find an email",due:null,sev:"info",act:"findEmail"};
+    case "drafted": return {label:"Send your Gmail draft",due:c.draftedAt||now,sev:"warn",act:"gmailLink"};
+    case "emailed": return {label:"Send follow-up 1",due:(c.lastSentAt||c.emailedAt||now)+fu,sev:"warn",act:"compose",kind:"fu1"};
+    case "fu1": return {label:"Send the final follow-up",due:(c.lastSentAt||now)+fu,sev:"warn",act:"compose",kind:"fu2"};
+    case "fu2": return {label:"No reply. Close it out",due:(c.lastSentAt||now)+fu,sev:"info",act:"close"};
+    case "replied": return {label:"Reply and set a time",due:c.repliedAt||now,sev:"hot",act:"open"};
+    case "scheduled": return c.callAt && c.callAt<now ? {label:"Log how the call went",due:c.callAt,sev:"hot",act:"open"} : {label:"Prep for the call",due:c.callAt?c.callAt-DAY:now,sev:"hot",act:"prep"};
+    case "talked": return {label:"Send a thank-you",due:c.talkedAt||now,sev:"crit",act:"compose",kind:"thanks"};
+    case "thanked": case "advocate": return {label:"Check in with an update",due:(c.thankedAt||c.talkedAt||now)+35*DAY,sev:"ok",act:"compose",kind:"checkin"};
+    default: return null;
+  }
+}
+
+/* ---------- render: chrome ---------- */
+const TABS=[["today","Today"],["find","Find people"],["pipeline","Pipeline"],["firms","Firms"],["jobs","Jobs"],["apps","Applications"],["resume","Resume"],["setup","Setup"]];
+function renderTabs(){
+  const dueN=Object.values(S.contacts).filter(c=>{const a=nextAction(c);return a&&a.due!=null&&a.due<=Date.now()+DAY&&c.stage!=="lead";}).length;
+  const cnt={today:dueN,pipeline:Object.keys(S.contacts).length};
+  $("#tabs").innerHTML=TABS.map(([id,l])=>`<button class="tab" role="tab" aria-selected="${S.tab===id}" data-act="tab" data-tab="${id}">${l}${cnt[id]?`<span class="ct">${cnt[id]}</span>`:""}</button>`).join("");
+  const p=P(); $("#mastSub").textContent=[p.school, p.gradYear?`Class of ${p.gradYear}`:p.year, "IB / Private credit"].filter(Boolean).join(" · ");
+}
+function renderConns(){
+  const names=["Clay","Gmail","Indeed"];
+  $("#conns").innerHTML=names.map(n=>{ const s=S.conn[n]; const cls=s==="ok"?"ok":s==="reauth"?"warn":s==="missing"?"crit":""; const t=s==="ok"?"connected":s==="reauth"?"reconnect in Settings":s==="missing"?"not connected":"checking"; return `<span class="conn" title="${n}: ${t}"><span class="dot ${cls}"></span>${n}</span>`; }).join("");
+}
+let rq=0;
+function dataChanged(){ if(rq) return; rq=requestAnimationFrame(()=>{ rq=0; buildIndex(); renderTabs(); updateView(); renderDrawer(); }); }
+function setTab(t){ S.tab=t; try{history.replaceState(null,"","#"+t);}catch{} renderTabs(); mountView(); window.scrollTo(0,0); if(t==="jobs") maybeAutoPull(); }
+function mountView(){ const m=$("#main"); m.innerHTML=banners()+`<div id="view"></div>`; ({today:mountToday,find:mountFind,pipeline:mountPipeline,firms:mountFirms,jobs:mountJobs,apps:mountApps,resume:mountResume,setup:mountSetup})[S.tab](); updateView(); }
+function updateView(){ ({today:updateToday,find:updateFind,pipeline:updatePipeline,firms:updateFirms,jobs:updateJobs,apps:updateApps,resume:updateResume,setup:updateSetup})[S.tab](); }
+function banners(){
+  if(!S.booted) return "";
+  if(!S.db) return `<div class="banner warn"><strong>Open this page in Claude</strong><span class="muted">Contacts, Gmail, Clay and job search only work inside the Claude viewer.</span></div>`;
+  if(S.ready.profile && !P().name) return `<div class="banner"><strong>Finish setup</strong><span class="muted">Add your name and availability so emails come out ready to send.</span><button class="btn sm" data-act="tab" data-tab="setup">Open Setup</button></div>`;
+  return "";
+}
+const typing = el => el && (el.tagName==="INPUT"||el.tagName==="TEXTAREA"||el.tagName==="SELECT");
+
+/* ---------- Today ---------- */
+function mountToday(){ $("#view").innerHTML=`<div class="grid2"><div class="stack" id="tdMain"></div><div class="stack" id="tdSide"></div></div>`; }
+function updateToday(){
+  const main=$("#tdMain"), side=$("#tdSide"); if(!main) return;
+  if(!S.ready.contacts){ main.innerHTML=`<div class="card">${'<div class="skel"></div>'.repeat(5)}</div>`; side.innerHTML=""; return; }
+  const now=Date.now(), p=P(), cs=Object.values(S.contacts);
+  const sod=startOfDay();
+  const sentToday=cs.filter(c=>(c.emailedAt>=sod)||(c.lastSentAt>=sod)).length;
+  const addedToday=cs.filter(c=>c.createdAt>=sod).length;
+  const emailed=cs.filter(c=>c.emailedAt).length, replied=cs.filter(c=>c.repliedAt||["replied","scheduled","talked","thanked","advocate"].includes(c.stage)).length;
+  const calls30=cs.filter(c=>c.talkedAt>=now-30*DAY).length;
+  const apps=Object.values(S.apps);
+  const appsDue=apps.filter(a=>a.deadline&&!["Applied","Online test","HireVue","Superday","Offer","Rejected","Withdrawn"].includes(a.status)&&Date.parse(a.deadline)<=now+21*DAY&&Date.parse(a.deadline)>=sod-DAY);
+
+  if(!cs.length){
+    main.innerHTML=`<div class="card"><div class="card-h"><div><div class="eyebrow">Start here</div><h2>Build your list, then let the desk run it</h2></div></div><div class="card-b">
+      <ol class="steps">
+        <li><div><strong>Pick target firms</strong><div class="muted" style="font-size:13px">${FIRMS.filter(f=>f.on).length} firms on your list. Add or drop banks and credit funds.</div></div><button class="btn sm" data-act="tab" data-tab="firms">Firms</button></li>
+        <li><div><strong>Find alumni at those firms</strong><div class="muted" style="font-size:13px">Searches by your school through Clay. Each person comes in with a LinkedIn link and a likely email.</div></div><button class="btn sm primary" data-act="tab" data-tab="find">Find people</button></li>
+        <li><div><strong>Or paste profiles and lists</strong><div class="muted" style="font-size:13px">One LinkedIn profile, a whole page of search results, or a CSV from any finder.</div></div><button class="btn sm" data-act="bulkOpen">Bulk add</button></li>
+        <li><div><strong>Connect Gmail once</strong><div class="muted" style="font-size:13px">Drafts land in Gmail with your resume attached. The desk sees what you sent, who replied, and what bounced.</div></div><button class="btn sm" data-act="tab" data-tab="setup">Setup</button></li>
+      </ol></div></div>`;
+  } else {
+    const items=[];
+    for(const c of cs){ const a=nextAction(c,now); if(a) items.push({c,a}); }
+    const due=items.filter(x=>x.c.stage!=="lead" && x.a.due!=null && x.a.due<=now+DAY).sort((x,y)=>x.a.due-y.a.due);
+    const upcoming=items.filter(x=>x.c.stage!=="lead" && x.a.due!=null && x.a.due>now+DAY && x.a.due<=now+7*DAY).sort((x,y)=>x.a.due-y.a.due);
+    const room=Math.max(0,(Number(p.dailyCap)||20)-sentToday);
+    const ready=cs.filter(c=>c.stage==="lead"&&c.email).sort((a,b)=>(b.ties||[]).length-(a.ties||[]).length || (a.createdAt||0)-(b.createdAt||0));
+    const noEmail=cs.filter(c=>c.stage==="lead"&&!c.email);
+    const row=(x)=>{ const c=x.c,a=x.a; const f=firmOf(c); return `<div class="todo-row sev-${a.sev}"><span class="stripe"></span><div class="what"><span class="who" data-act="open" data-id="${esc(c.id)}">${esc(c.name)}</span> <span class="faint">· ${esc(f?.name||c.firm||"")}</span><div class="meta">${esc(a.label)} · <span class="mono">${dueText(a.due)}</span>${c.emailedAt?` · <span class="mono">${tPlus(c.emailedAt)}</span> since first email`:""}</div></div>${nextBtn(c,a)}</div>`; };
+    let html=`<div class="card"><div class="card-h"><div><div class="eyebrow">${new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div><h2>${due.length?`${due.length} thing${due.length>1?"s":""} due`:"Nothing overdue"}</h2></div><div class="btn-row"><button class="btn sm" data-act="sync">${S.syncing?"Checking Gmail…":"Check Gmail"}</button></div></div>`;
+    html+=`<div class="todo">${due.length?due.map(row).join(""):`<div class="empty" style="padding:16px">Follow-ups, thank-yous and call prep show up here when they're due.</div>`}</div>`;
+    html+=`<div class="group-h"><h3>Write and send today</h3><span class="mono faint">${room} of ${p.dailyCap} sends left today</span></div><div class="todo">`;
+    if(ready.length){ html+=ready.slice(0,Math.max(room,3)).map(c=>row({c,a:nextAction(c,now)})).join("");
+      html+=`<div class="todo-row sev-info"><span class="stripe"></span><div class="what"><strong>${ready.length} lead${ready.length>1?"s":""} with emails</strong><div class="meta">Writes each email in your voice and saves it to Gmail drafts with your resume. You review and hit send.</div></div><button class="btn sm primary" data-act="bulkDraft" data-n="${Math.min(ready.length,Math.max(room,1))}">Draft ${Math.min(ready.length,Math.max(room,1))}</button></div>`; }
+    else html+=`<div class="empty" style="padding:16px">No leads waiting. <button class="btn sm" data-act="tab" data-tab="find">Find people</button></div>`;
+    if(noEmail.length) html+=`<div class="todo-row sev-info"><span class="stripe"></span><div class="what"><strong>${noEmail.length} lead${noEmail.length>1?"s":""} without an email</strong><div class="meta">Guess from each firm's format for free, or look them up in Clay.</div></div><div class="btn-row"><button class="btn sm" data-act="bulkGuess">Guess all</button><button class="btn sm" data-act="bulkFind">Clay lookup</button></div></div>`;
+    html+=`</div>`;
+    if(upcoming.length) html+=`<div class="group-h"><h3>Coming up this week</h3></div><div class="todo">${upcoming.slice(0,12).map(row).join("")}</div>`;
+    html+=`</div>`;
+    main.innerHTML=html;
+  }
+  // side
+  const groups=GROUPS.map(g=>({...g,n:cs.filter(c=>stageOf(c.stage).g===g.id).length}));
+  const total=cs.length||1;
+  const lr=S.lastRun, lrs=lr?.summary||{};
+  side.innerHTML=`${lr?`<div class="banner" style="margin:0;font-size:13px"><span class="dot ${lr.ok===false?"warn":"ok"}"></span><div style="min-width:0"><strong>Auto-update ran ${esc(ago(lr.at))}</strong><div class="muted">${esc([lrs.newLeads!=null&&`${lrs.newLeads} new leads`,lrs.replies!=null&&`${lrs.replies} replies`,lrs.newlySent!=null&&`${lrs.newlySent} sent`,lrs.bounces!=null&&`${lrs.bounces} bounces`,lrs.ibpcRoles!=null&&`${lrs.ibpcRoles} open roles`].filter(Boolean).join(" · ")||lr.note||"")}</div></div></div>`:""}
+  <div class="card"><div class="card-h"><h3>Today's numbers</h3><span class="faint mono" style="font-size:11px">Gmail checked ${ago(Math.max(S.lastSync||0,lr?.at||0))}</span></div>
+    <div class="kpis">
+      <div class="kpi"><div class="v">${addedToday}<small> / ${p.dailyLeadGoal}</small></div><div class="l">Leads added today</div><div class="meter"><i style="width:${Math.min(100,Math.round(100*addedToday/(p.dailyLeadGoal||50)))}%"></i></div></div>
+      <div class="kpi"><div class="v">${sentToday}<small> / ${p.dailyCap}</small></div><div class="l">Emails sent today</div><div class="meter"><i style="width:${Math.min(100,Math.round(100*sentToday/(p.dailyCap||20)))}%"></i></div></div>
+      <div class="kpi"><div class="v">${emailed?Math.round(100*replied/emailed):0}<small>%</small></div><div class="l">Reply rate (${replied} of ${emailed})</div></div>
+      <div class="kpi"><div class="v">${calls30}</div><div class="l">Calls, last 30 days</div></div>
+    </div></div>
+    <div class="card"><div class="card-h"><h3>Pipeline</h3><span class="mono faint">${cs.length} people</span></div><div class="card-b">
+      <div class="funnel">${groups.map(g=>g.n?`<i class="g-${g.id}" style="width:${100*g.n/total}%" title="${g.label}: ${g.n}"></i>`:"").join("")}</div>
+      <div class="legend">${groups.map(g=>`<span class="pill g-${g.id}">${g.label}</span><span class="mono">${g.n}</span>`).join("")}</div>
+    </div></div>
+    ${(()=>{ const jobs=allFirmJobs().filter(j=>j.cat==="IB"||j.cat==="PC").sort((a,b)=>(Date.parse(b.posted)||0)-(Date.parse(a.posted)||0)); const nI=jobs.filter(j=>j.level==="Intern").length; const nF=new Set(jobs.map(j=>j.firmId)).size;
+      return `<div class="card"><div class="card-h"><h3>Open roles at your firms</h3><button class="btn sm ghost" data-act="tab" data-tab="jobs">Jobs</button></div><div class="card-b">${Object.keys(S.firmJobs).length?(jobs.length?`<p style="margin:0 0 8px;font-size:13px"><strong class="mono">${jobs.length}</strong> IB and private credit roles at ${nF} firm${nF===1?"":"s"}${nI?`, <strong class="mono">${nI}</strong> internship${nI===1?"":"s"}`:""}.</p><div class="legend">${jobs.slice(0,4).map(j=>`<span style="min-width:0;overflow-wrap:anywhere">${safeUrl(j.url)?`<a href="${esc(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a>`:esc(j.title)}</span><span class="faint" style="font-size:12px;white-space:nowrap">${esc(firmById(j.firmId)?.name||"")}</span>`).join("")}</div>`:`<p class="muted" style="margin:0;font-size:13px">No IB or private credit roles on Indeed for your firms right now. Check their careers pages on the Jobs tab.</p>`):`<p class="muted" style="margin:0;font-size:13px">Pull current roles at your target firms from Indeed.</p><button class="btn sm" style="margin-top:8px" data-act="pullJobs">Pull jobs</button>`}</div></div>`; })()}
+    <div class="card"><div class="card-h"><h3>Deadlines, next 3 weeks</h3><button class="btn sm ghost" data-act="tab" data-tab="apps">All</button></div><div class="card-b">
+      ${appsDue.length?`<div class="legend">${appsDue.sort((a,b)=>Date.parse(a.deadline)-Date.parse(b.deadline)).map(a=>`<span>${esc(a.firm)} · ${esc(a.program||"")}</span><span class="mono">${dueText(Date.parse(a.deadline))}</span>`).join("")}</div>`:`<p class="muted" style="margin:0;font-size:13px">No deadlines tracked yet. Add them in Applications as firms post.</p>`}
+    </div></div>`;
+}
+function nextBtn(c,a){
+  if(a.act==="gmailLink") return c.lastDraft?.url?`<a class="btn sm" href="${esc(c.lastDraft.url)}" target="_blank" rel="noopener">Open draft ↗</a>`:`<button class="btn sm" data-act="open" data-id="${esc(c.id)}">Open</button>`;
+  const label={compose:"Write it",findEmail:"Find email",open:"Open",prep:"Prep me",close:"Close out"}[a.act]||"Open";
+  return `<button class="btn sm ${a.sev==="crit"||a.sev==="hot"?"primary":""}" data-act="doNext" data-id="${esc(c.id)}">${label}</button>`;
+}
+
+/* ---------- Find people ---------- */
+function findFirms(){ if(!S.find.firms) S.find.firms=new Set(FIRMS.filter(f=>f.on).map(f=>f.id)); return S.find.firms; }
+function mountFind(){
+  const p=P();
+  $("#view").innerHTML=`<div class="grid2"><div class="stack">
+    <div class="card"><div class="card-h"><div><div class="eyebrow">Clay · search by school</div><h2>Alumni at your firms</h2></div></div><div class="card-b stack" style="gap:12px">
+      <div class="form-grid">
+        <label class="lbl">Who<select class="in" id="fRole" data-chg="fRole" style="width:100%">${Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${k===S.find.role?"selected":""}>${v.label}</option>`).join("")}</select></label>
+        <label class="lbl">Where they live<select class="in" id="fLoc" data-chg="fLoc" style="width:100%">${Object.entries(LOCS).map(([k,v])=>`<option value="${esc(k)}" ${k===S.find.loc?"selected":""}>${v}</option>`).join("")}</select></label>
+      </div>
+      <div><div class="lbl" style="flex-direction:row;justify-content:space-between;align-items:baseline"><span>Firms</span><span class="btn-row"><button class="chip" data-act="fPick" data-k="targets">My targets</button>${Object.keys(TYPES).map(t=>`<button class="chip" data-act="fPick" data-k="${t}">${t}</button>`).join("")}<button class="chip" data-act="fPick" data-k="none">None</button></span></div>
+      <div class="chips" id="fFirms" style="margin-top:8px"></div>
+      <label class="chk" style="margin-top:8px"><input type="checkbox" id="fAll" data-chg="fAll" ${S.find.showAll?"checked":""}> Show every firm in the library</label></div>
+      <div class="btn-row"><button class="btn primary" data-act="runFind" id="fRun">Search</button><span class="hint" id="fHint" style="margin:0"></span></div>
+      <p class="hint" style="margin:0">School match: ${esc(p.schoolNames.join(" · "))}${p.schoolKeyword?` · or any school containing "${esc(p.schoolKeyword)}"`:""}. Change it in Setup.</p>
+    </div></div>
+    <div id="fResults"></div>
+  </div>
+  <div class="stack">
+    <div class="card"><div class="card-h"><h3>More sources, no Clay credits</h3></div><div class="card-b stack" style="gap:12px;font-size:13px">
+      <div><strong>LinkedIn alumni pages</strong><p class="muted" style="margin:4px 0 8px">Open a search, select the whole results page (Ctrl+A, Ctrl+C), then paste it into Bulk add. Claude pulls out every person and guesses each email from the firm's format.</p><div class="chips" id="fLi"></div></div>
+      <div><strong>Lists you already have</strong><p class="muted" style="margin:4px 0 8px">Club placement sheets, firm team pages, a CSV from your own email finder, Apollo or Hunter exports.</p><button class="btn sm" data-act="bulkOpen">Bulk add or import CSV</button></div>
+      <div><strong>Your email finder script</strong><p class="muted" style="margin:4px 0 8px">Export leads that need emails, run your script on the CSV, then import its output. Rows match back by id.</p><button class="btn sm" data-act="exportFinder">Export leads for finder</button></div>
+    </div></div>
+  </div></div>`;
+}
+function updateFind(){
+  const sel=findFirms(); const box=$("#fFirms"); if(!box) return;
+  const list=S.find.showAll?FIRMS:FIRMS.filter(f=>f.on||sel.has(f.id));
+  box.innerHTML=list.length?list.map(f=>`<button class="chip ${sel.has(f.id)?"on":""}" data-act="fToggle" data-id="${f.id}">${esc(f.name)}</button>`).join(""):`<span class="muted" style="font-size:13px">No target firms yet. Tick "Show every firm" or pick some on the Firms tab.</span>`;
+  const n=sel.size; $("#fRun").disabled=!n||S.find.running; $("#fRun").textContent=S.find.running?"Searching…":"Search";
+  $("#fHint").textContent=n?`${n} firm${n>1?"s":""} · ${Math.ceil(n/10)} Clay search${n>10?"es":""}`:"Pick at least one firm";
+  const li=$("#fLi"); if(li){ const fs=FIRMS.filter(f=>sel.has(f.id)).slice(0,14); li.innerHTML=fs.length?fs.map(f=>`<a class="chip" href="${esc(liSchoolUrl(f))}" target="_blank" rel="noopener">${esc(f.name)} ↗</a>`).join(""):`<span class="faint">Pick firms to get links.</span>`; }
+  const r=$("#fResults"); if(!r) return;
+  const res=S.find.results;
+  if(!res.length && !S.find.running){ r.innerHTML=S.find.done?`<div class="card empty"><h3>No matches</h3><p>Try "Anyone at the firm" or widen the location.</p>${errsHTML(S.find.errs)}</div>`:(S.find.errs.length?`<div class="card card-b" style="padding-top:16px">${errsHTML(S.find.errs)}</div>`:""); return; }
+  const fresh=res.filter(x=>!S.contacts[x.cid]);
+  const allOn=fresh.length&&fresh.every(x=>S.find.picked.has(x.cid));
+  r.innerHTML=`<div class="section-title"><h3>${res.length} people${S.find.running?" so far":""}</h3><div class="btn-row">
+      <button class="btn sm" data-act="fSelAll">${allOn?"Clear":"Select all new"}</button>
+      <button class="btn sm primary" data-act="fAdd" ${S.find.picked.size?"":"disabled"}>Add ${S.find.picked.size||""} to pipeline</button>
+      ${S.find.pages.some(pg=>pg.hasMore)?`<button class="btn sm" data-act="fMore">Load more</button>`:""}</div></div>
+    ${errsHTML(S.find.errs)}
+    <div class="tbl-wrap"><table class="tbl"><thead><tr><th class="cb"></th><th>Name</th><th>Firm</th><th>Location</th><th></th></tr></thead><tbody>
+    ${res.map(x=>{const inP=!!S.contacts[x.cid];return `<tr><td class="cb">${inP?"":`<input type="checkbox" data-chg="fPickRow" data-id="${esc(x.cid)}" ${S.find.picked.has(x.cid)?"checked":""} aria-label="Select ${esc(x.name)}">`}</td>
+      <td><div class="nm">${esc(x.name)}</div><div class="sub">${esc(x.title)}${x.start?` · since ${esc(x.start)}`:""}</div></td>
+      <td>${esc(x.firm)}</td><td class="sub">${esc(x.location)}</td>
+      <td style="white-space:nowrap">${safeUrl(x.linkedin)?`<a href="${esc(x.linkedin)}" target="_blank" rel="noopener">LinkedIn ↗</a>`:""} ${inP?`<button class="btn sm ghost" data-act="open" data-id="${esc(x.cid)}">In pipeline</button>`:""}</td></tr>`;}).join("")}
+    </tbody></table></div>`;
+}
+function errsHTML(errs){ return errs.length?`<div class="banner crit" style="margin:0 0 12px">${errs.map(esc).join("<br>")}</div>`:""; }
+function liSchoolUrl(f){ const p=P(); return p.linkedinSchool?`https://www.linkedin.com/school/${encodeURIComponent(p.linkedinSchool)}/people/?keywords=${encodeURIComponent(f.name)}`:`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(f.name+" "+(p.schoolNames[0]||""))}`; }
+function buildDsl(){
+  const p=P(); const q=s=>`"${String(s).replace(/["\\]/g,"")}"`;
+  const names=(p.schoolNames||[]).filter(Boolean);
+  let edu=`education.any(${names.length?`school_name in (${names.map(q).join(", ")})`:""}${p.schoolKeyword?`${names.length?" or ":""}school_name contains ${q(p.schoolKeyword)}`:""})`;
+  let dsl=`select from people where ${edu}`;
+  const t=ROLES[S.find.role].t; if(t.length) dsl+=` and experiences.any(is_current = true and job_title is_similar_to (${t.map(q).join(", ")}))`;
+  if(S.find.loc) dsl+=` and location_state = ${q(S.find.loc)}`;
+  return dsl;
+}
+function ingestClay(p){
+  for(const c of (p?.contacts||[])){
+    const dom=String(c.domain||c.companyIdentifier||"").toLowerCase();
+    const firm=matchFirm(c.latest_experience_company)||FIRMS.find(f=>f.domain===dom);
+    const row={name:c.name,title:c.latest_experience_title||"",firm:c.latest_experience_company||firm?.name||"",firmId:firm?.id||"",location:c.location_name||"",linkedin:c.url||"",start:c.latest_experience_start_date||"",taskId:p.taskId,entityId:String(c.entityId||c.profile_id||"")};
+    row.cid=idFor(row.linkedin,row.name,row.firm);
+    if(!S.find.results.some(r=>r.cid===row.cid)) S.find.results.push(row);
+  }
+}
+async function runFind(){
+  const p=P(); if(!(p.schoolNames||[]).length&&!p.schoolKeyword) return toast("Add your school in Setup first.","warn");
+  const firms=FIRMS.filter(f=>findFirms().has(f.id)&&f.domain); if(!firms.length) return;
+  Object.assign(S.find,{running:true,results:[],pages:[],errs:[],picked:new Set(),done:false}); updateFind();
+  const dsl=buildDsl();
+  for(const ch of chunks(firms,10)){
+    try{ const r=await call("Clay","search-contacts",{companyIdentifiers:ch.map(f=>f.domain),dslQuery:dsl}); ingestClay(r); S.find.pages.push({taskId:r?.taskId,hasMore:!!r?.hasMore}); }
+    catch(e){ S.find.errs.push(errText(e,"Clay")+` (${ch.map(f=>f.name).join(", ")})`); }
+    updateFind();
+  }
+  S.find.running=false; S.find.done=true; for(const x of S.find.results) if(!S.contacts[x.cid]) S.find.picked.add(x.cid); updateFind();
+}
+async function findMore(){
+  S.find.running=true; updateFind();
+  for(const pg of S.find.pages.filter(x=>x.hasMore&&x.taskId)){
+    try{ const r=await call("Clay","load-more-search-results",{taskId:pg.taskId}); ingestClay(r); pg.taskId=r?.taskId; pg.hasMore=!!r?.hasMore; }
+    catch(e){ pg.hasMore=false; S.find.errs.push(errText(e,"Clay")); }
+    updateFind();
+  }
+  S.find.running=false; for(const x of S.find.results) if(!S.contacts[x.cid]) S.find.picked.add(x.cid); updateFind();
+}
+async function addFound(){
+  const rows=S.find.results.filter(x=>S.find.picked.has(x.cid)&&!S.contacts[x.cid]); if(!rows.length) return;
+  const p=P(); const b=bulkStart("Adding to pipeline",rows.length); let n=0;
+  for(const x of rows){ if(b.stop) break;
+    const {first,last}=splitName(x.name);
+    const c={name:x.name,first,last,firm:x.firm,firmId:x.firmId,title:x.title,location:x.location,linkedin:x.linkedin,startedRole:x.start,school:p.schoolNames[0]||p.school,ties:[`${p.school} alum`],stage:"lead",source:"Clay school search",clayTask:x.taskId,clayEntity:x.entityId};
+    const g=guessEmail(c); if(g){c.email=g;c.emailSrc="pattern";}
+    c.log=addLog({},`Added from Clay school search`);
+    try{ await saveContact(x.cid,c); n++; }catch{} S.find.picked.delete(x.cid); bulkStep(x.name);
+  }
+  bulkEnd(`Added ${n} to your pipeline${n?" with likely emails":""}.`); updateFind();
+}
+
+/* ---------- Pipeline ---------- */
+function mountPipeline(){
+  $("#view").innerHTML=`<div class="toolbar"><input class="in grow" id="pq" placeholder="Search name, firm, title, email" data-inp="pq" value="${esc(S.pf.q)}" style="color:var(--ink)">
+    <select class="in" id="pfFirm" data-chg="pfFirm"></select>
+    <select class="in" id="pfSort" data-chg="pfSort"><option value="due">Sort: next step due</option><option value="new">Sort: newest</option><option value="firm">Sort: firm</option><option value="name">Sort: name</option></select>
+    <button class="btn" data-act="exportCSV">Export CSV</button></div>
+    <div class="chips" id="pfGroups" style="margin-bottom:12px"></div><div id="pBulk"></div><div id="pTable"></div>`;
+  $("#pfSort").value=S.pf.sort;
+}
+function filteredContacts(){
+  const q=S.pf.q.trim().toLowerCase();
+  let cs=Object.values(S.contacts).filter(c=>(S.pf.group==="all"||stageOf(c.stage).g===S.pf.group)&&(!S.pf.firm||firmOf(c)?.id===S.pf.firm||(!firmOf(c)&&S.pf.firm==="_none")));
+  if(q) cs=cs.filter(c=>[c.name,c.firm,c.title,c.email,c.location].join(" ").toLowerCase().includes(q));
+  const now=Date.now();
+  const key={due:c=>{const a=nextAction(c,now);return a&&a.due!=null?a.due:9e15;},new:c=>-(c.createdAt||0),firm:c=>(firmOf(c)?.name||c.firm||"").toLowerCase(),name:c=>(c.name||"").toLowerCase()}[S.pf.sort];
+  return cs.sort((a,b)=>{const x=key(a),y=key(b);return x<y?-1:x>y?1:0;});
+}
+function updatePipeline(){
+  const tb=$("#pTable"); if(!tb) return;
+  const all=Object.values(S.contacts);
+  const fsel=$("#pfFirm"); if(fsel&&!typing(document.activeElement)){ const used=[...new Set(all.map(c=>firmOf(c)?.id).filter(Boolean))].map(firmById).filter(Boolean).sort((a,b)=>a.name.localeCompare(b.name)); fsel.innerHTML=`<option value="">All firms</option>${used.map(f=>`<option value="${f.id}" ${S.pf.firm===f.id?"selected":""}>${esc(f.name)}</option>`).join("")}`; }
+  $("#pfGroups").innerHTML=[{id:"all",label:"All"},...GROUPS].map(g=>{const n=g.id==="all"?all.length:all.filter(c=>stageOf(c.stage).g===g.id).length;return `<button class="chip ${S.pf.group===g.id?"on":""}" data-act="pfGroup" data-g="${g.id}">${g.label}<span class="n">${n}</span></button>`;}).join("");
+  if(!S.ready.contacts){ tb.innerHTML=`<div class="card">${'<div class="skel"></div>'.repeat(6)}</div>`; return; }
+  const cs=filteredContacts();
+  for(const id of [...S.sel]) if(!S.contacts[id]) S.sel.delete(id);
+  const nSel=S.sel.size;
+  $("#pBulk").innerHTML=nSel?`<div class="banner" style="margin-bottom:12px"><strong>${nSel} selected</strong><div class="btn-row">
+    <button class="btn sm primary" data-act="bulkDraftSel">Write + save Gmail drafts</button><button class="btn sm" data-act="bulkGuessSel">Guess emails</button><button class="btn sm" data-act="bulkFindSel">Find emails in Clay</button>
+    <select class="in" data-chg="bulkStage" style="font-size:12px;padding:4px 6px"><option value="">Move to stage…</option>${STAGES.map(s=>`<option value="${s.id}">${s.label}</option>`).join("")}</select>
+    <button class="btn sm ghost" data-act="selNone">Clear</button></div></div>`:"";
+  if(!all.length){ tb.innerHTML=`<div class="card empty"><h3>No one in your pipeline yet</h3><p>Find alumni through Clay, paste a LinkedIn profile, or bulk-add a list.</p><div class="btn-row" style="justify-content:center"><button class="btn primary" data-act="tab" data-tab="find">Find people</button><button class="btn" data-act="bulkOpen">Bulk add</button></div></div>`; return; }
+  if(!cs.length){ tb.innerHTML=`<div class="card empty">No one matches these filters.</div>`; return; }
+  const allSel=cs.every(c=>S.sel.has(c.id));
+  const now=Date.now();
+  tb.innerHTML=`<div class="tbl-wrap"><table class="tbl"><thead><tr><th class="cb"><input type="checkbox" data-chg="selAll" ${allSel?"checked":""} aria-label="Select all"></th><th>Name</th><th>Firm</th><th>Stage</th><th>Email</th><th>Next step</th></tr></thead><tbody>
+  ${cs.slice(0,500).map(c=>{const f=firmOf(c);const st=stageOf(c.stage);const a=nextAction(c,now);return `<tr class="click" data-act="open" data-id="${esc(c.id)}">
+    <td class="cb" data-stop="1"><input type="checkbox" data-chg="selRow" data-id="${esc(c.id)}" ${S.sel.has(c.id)?"checked":""} aria-label="Select ${esc(c.name)}"></td>
+    <td><div class="nm">${esc(c.name)}</div><div class="sub">${esc(c.title||"")}</div>${(c.ties||[]).length?`<div style="margin-top:3px">${c.ties.slice(0,2).map(t=>`<span class="tag tie">${esc(t)}</span>`).join(" ")}</div>`:""}</td>
+    <td>${esc(f?.name||c.firm||"")}${f?` <span class="tag t-${f.type}">${f.type}</span>`:""}</td>
+    <td><span class="pill g-${st.g}">${st.label}</span>${c.emailedAt?`<div class="sub mono">${tPlus(c.emailedAt)}</div>`:""}</td>
+    <td style="max-width:240px">${c.email?`<div style="overflow-wrap:anywhere">${esc(c.email)}</div>${srcHTML(c)}`:`<span class="faint">none yet</span>`}</td>
+    <td>${a?`<div>${esc(a.label)}</div><div class="sub mono">${a.due!=null?dueText(a.due):""}</div>`:""}</td></tr>`;}).join("")}
+  </tbody></table></div>${cs.length>500?`<p class="hint">Showing the first 500. Narrow with search or filters.</p>`:""}`;
+}
+function srcHTML(c){ const f=firmOf(c); const info=f?S.idx.pat[f.id]:null; const m={clay:["v","verified · Clay"],import:["v","from import"],replied:["v","confirmed · replied"],manual:["v","typed in"],pattern:["g",`guess · ${inferPattern(c.email,c.first,c.last)||info?.pat||"format"}`]}[c.emailSrc]||["x","source unknown"]; return `<div class="src ${m[0]}">${m[1]}</div>`; }
+
+/* ---------- Firms ---------- */
+function mountFirms(){
+  const d=S.disc;
+  $("#view").innerHTML=`<div class="section-title"><div><div class="eyebrow">Coverage list</div><h2>Firms</h2></div><div class="btn-row"><button class="btn" data-act="firmAdd">Add a firm</button></div></div>
+  <div class="card" style="margin-bottom:16px"><div class="card-h"><div><div class="eyebrow">Clay · company search</div><h3>Find new firms</h3></div><span class="hint" style="margin:0">Adds firms to your list with their website, so alumni search and email guessing work right away.</span></div><div class="card-b stack" style="gap:10px">
+    <div class="form-grid four">
+      <label class="lbl">Kind<select class="in" id="dKind" data-chg="dKind" style="width:100%"><option value="ib" ${d.kind==="ib"?"selected":""}>Investment banks & boutiques</option><option value="pc" ${d.kind==="pc"?"selected":""}>Private credit & direct lenders</option><option value="any" ${d.kind==="any"?"selected":""}>Describe it myself</option></select></label>
+      <label class="lbl">Focus (optional)<input class="in" id="dText" data-chg="dText" value="${esc(d.text)}" placeholder="energy A&D, restructuring, healthcare…"></label>
+      <label class="lbl">Office or HQ city<input class="in" id="dPlace" data-chg="dPlace" value="${esc(d.place)}" list="dPlaces" placeholder="Houston"><datalist id="dPlaces"><option value="Houston"><option value="Dallas"><option value="Austin"><option value="San Antonio"><option value="Fort Worth"><option value="New York"><option value="Chicago"></datalist></label>
+      <label class="lbl">Size<select class="in" id="dSize" data-chg="dSize" style="width:100%"><option value="">Any size</option><option value="s" ${d.size==="s"?"selected":""}>11 to 50</option><option value="m" ${d.size==="m"?"selected":""}>51 to 200</option><option value="l" ${d.size==="l"?"selected":""}>201 to 1,000</option><option value="xl" ${d.size==="xl"?"selected":""}>1,000+</option></select></label>
+    </div>
+    <div class="btn-row"><button class="btn primary" data-act="discRun" id="dRun">Search firms</button><span class="hint" style="margin:0">Matches firms whose LinkedIn description mentions the city, so it catches branch offices too.</span></div>
+    <div id="dRes"></div></div></div>
+  <div class="toolbar"><div class="chips" id="ffType"></div><div class="chips" id="ffShow" style="margin-left:auto"></div></div><div id="fTable"></div>
+  <p class="hint">Email formats marked "best guess" come from public patterns and aren't confirmed. The desk upgrades a firm's format once a Clay lookup, an import or a reply confirms it, and moves to the next format after two bounces.</p>`;
+}
+const SIZES={s:["11-50"],m:["51-200"],l:["201-500","501-1,000"],xl:["1,001-5,000","5,001-10,000","10,001+"]};
+function discDsl(){
+  const d=S.disc, q=s=>`"${String(s).replace(/["\\]/g,"").trim()}"`, parts=[];
+  if(d.kind==="ib") parts.push(`industry = "Investment Banking"`);
+  else if(d.kind==="pc") parts.push(`products_and_services is_similar_to ("private credit", "direct lending", "middle market lending")`);
+  if(d.text.trim()) parts.push(`products_and_services is_similar_to (${q(d.text)})`);
+  if(d.place.trim()) parts.push(`description contains ${q(d.place)}`);
+  if(d.size) parts.push(`company_size in (${SIZES[d.size].map(q).join(", ")})`);
+  return parts.length?`select from companies where ${parts.join(" and ")}`:"";
+}
+function ingestCompanies(p){
+  const known=new Set(FIRMS.flatMap(f=>[f.domain,f.mail]).filter(Boolean).map(x=>x.toLowerCase()));
+  const list=Object.values(p?.companies||{}).sort((a,b)=>(a.order??0)-(b.order??0));
+  for(const c of list){ const dom=String(c.domain||"").toLowerCase(); if(!dom||S.disc.results.some(r=>r.domain===dom)) continue;
+    S.disc.results.push({name:c.name||dom,domain:dom,size:c.size||"",industry:c.industry||"",hq:c.locality||"",desc:String(c.description||"").slice(0,400),url:c.url||"",emp:c.employee_count||"",known:known.has(dom)||!!matchFirm(c.name)}); }
+}
+async function discRun(more){
+  const d=S.disc; const dsl=discDsl(); if(!dsl) return toast("Pick a kind, focus or city first.","warn");
+  if(!more) Object.assign(d,{results:[],taskId:null,hasMore:false,err:"",picked:new Set()});
+  d.running=true; updateFirms();
+  try{ const r=more?await call("Clay","load-more-search-results",{taskId:d.taskId}):await call("Clay","search-companies",{dslQuery:dsl}); ingestCompanies(r); d.taskId=r?.taskId||d.taskId; d.hasMore=!!r?.hasMore; for(const x of d.results) if(!x.known) d.picked.add(x.domain); }
+  catch(e){ d.err=errText(e,"Clay"); }
+  d.running=false; updateFirms();
+}
+async function discAdd(){
+  const d=S.disc; const rows=d.results.filter(r=>d.picked.has(r.domain)&&!r.known); if(!rows.length) return;
+  const type=d.kind==="pc"?"PC":/texas|tx\b|houston|dallas|austin|san antonio|fort worth/i.test(d.place+" "+rows.map(r=>r.hq).join(" "))?"TX":"MM";
+  for(const r of rows){ const tx=/texas|, tx\b/i.test(r.hq)?r.hq:(d.place&&/houston|dallas|austin|san antonio|fort worth/i.test(d.place)?d.place:"");
+    await saveTarget("c-"+slug(r.name),{custom:true,name:r.name,type:d.kind==="pc"?"PC":(/texas|, tx\b/i.test(r.hq)?"TX":type),domain:r.domain,mail:r.domain,pat:"first.last",on:true,tx,note:`Found with Clay. HQ ${r.hq||"?"}, ${r.size||"?"} people.`,addedFrom:"discover"}); r.known=true; }
+  d.picked.clear(); toast(`Added ${rows.length} firm${rows.length===1?"":"s"} to your list. Find alumni there from the Find people tab.`,"ok"); updateFirms();
+}
+function updateDisc(){
+  const el=$("#dRes"); if(!el) return; const d=S.disc;
+  $("#dRun").disabled=d.running; $("#dRun").textContent=d.running?"Searching…":"Search firms";
+  if(d.err){ el.innerHTML=errsHTML([d.err]); return; }
+  if(!d.results.length){ el.innerHTML=d.taskId&&!d.running?`<p class="muted" style="margin:0;font-size:13px">No firms matched. Try a bigger city, drop the size filter, or change the focus.</p>`:""; return; }
+  const fresh=d.results.filter(r=>!r.known);
+  el.innerHTML=`<div class="section-title" style="margin:0"><strong>${d.results.length} firms · ${fresh.length} not on your list</strong><div class="btn-row"><button class="btn sm primary" data-act="discAdd" ${d.picked.size?"":"disabled"}>Add ${d.picked.size||""} to my list</button>${d.hasMore?`<button class="btn sm" data-act="discMore">Load more</button>`:""}</div></div>
+  <div class="tbl-wrap" style="max-height:420px;overflow:auto"><table class="tbl"><thead><tr><th class="cb"></th><th>Firm</th><th>HQ</th><th class="num">People</th><th>What they do</th></tr></thead><tbody>
+  ${d.results.map(r=>`<tr><td class="cb">${r.known?"":`<input type="checkbox" data-chg="discPick" data-id="${esc(r.domain)}" ${d.picked.has(r.domain)?"checked":""} aria-label="Select ${esc(r.name)}">`}</td>
+    <td><div class="nm">${safeUrl(r.url)?`<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.name)}</a>`:esc(r.name)}${r.known?` <span class="tag">on your list</span>`:""}</div><div class="sub">${esc(r.domain)}</div></td>
+    <td class="sub">${esc(r.hq)}</td><td class="num">${esc(r.emp||r.size)}</td><td class="sub" style="max-width:360px">${esc(r.desc.slice(0,180))}${r.desc.length>180?"…":""}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function updateFirms(){
+  updateDisc();
+  const tb=$("#fTable"); if(!tb) return;
+  $("#ffType").innerHTML=[["all","All"],...Object.entries(TYPES)].map(([k,v])=>`<button class="chip ${S.ff.type===k?"on":""}" data-act="ffType" data-k="${k}">${v}</button>`).join("");
+  $("#ffShow").innerHTML=[["targets","My targets"],["all","Whole library"]].map(([k,v])=>`<button class="chip ${S.ff.show===k?"on":""}" data-act="ffShow" data-k="${k}">${v}</button>`).join("");
+  let fs=FIRMS.filter(f=>(S.ff.type==="all"||f.type===S.ff.type)&&(S.ff.show==="all"||f.on));
+  fs.sort((a,b)=>(b.on-a.on)||(a.tier-b.tier)||a.name.localeCompare(b.name));
+  if(!fs.length){ tb.innerHTML=`<div class="card empty"><h3>No target firms here</h3><p>Switch to "Whole library" and tick the firms you're recruiting for.</p></div>`; return; }
+  tb.innerHTML=`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Target</th><th>Firm</th><th>Email format</th><th class="num">People</th><th class="num">Emailed</th><th class="num">Talked</th><th></th></tr></thead><tbody>
+  ${fs.map(f=>{const cs=S.idx.byFirm[f.id]||[];const em=cs.filter(c=>c.emailedAt).length;const tk=cs.filter(c=>["talked","thanked","advocate"].includes(c.stage)).length;const info=S.idx.pat[f.id]||{pat:f.pat,why:"",lvl:"g"};return `<tr>
+    <td><button class="chip ${f.on?"on":""}" data-act="firmToggle" data-id="${f.id}" aria-pressed="${f.on}">${f.on?"Target":"Add"}</button></td>
+    <td style="max-width:320px"><div class="nm">${esc(f.name)}</div><div class="sub"><span class="tag t-${f.type}">${TYPES[f.type]||f.type}</span> ${esc(f.domain||"")}</div>${f.tx?`<div class="sub" style="margin-top:3px">Texas: ${esc(f.tx)}</div>`:""}${f.mynote?`<div class="sub" style="margin-top:3px">Your note: ${esc(f.mynote)}</div>`:""}${firmNote(f)?`<div class="sub faint" style="margin-top:3px">${esc(firmNote(f))}</div>`:""}${jobCount(f.id)?`<div class="sub" style="margin-top:3px"><a href="#" data-act="jobsFor" data-id="${f.id}">${jobCount(f.id)} IB/PC role${jobCount(f.id)>1?"s":""} open</a></div>`:""}</td>
+    <td><div class="mono" style="font-size:12px">${esc(info.pat)}@${esc(f.mail||"?")}</div><div class="src ${info.lvl}">${esc(info.why)}</div></td>
+    <td class="num">${cs.length}</td><td class="num">${em}</td><td class="num">${tk}</td>
+    <td style="white-space:nowrap"><div class="btn-row" style="flex-wrap:nowrap"><button class="btn sm" data-act="findAt" data-id="${f.id}">Find alumni</button><a class="btn sm ghost" href="${esc(liSchoolUrl(f))}" target="_blank" rel="noopener">LinkedIn ↗</a><a class="btn sm ghost" href="${esc(careersUrl(f))}" target="_blank" rel="noopener">Careers ↗</a><button class="btn sm ghost" data-act="firmEdit" data-id="${f.id}">Edit</button></div></td></tr>`;}).join("")}
+  </tbody></table></div>`;
+}
+function postingsUrl(f){ const p=P(); const yr=p.gradYear?Number(p.gradYear)-1:""; const role=f.type==="PC"?"private credit summer analyst":"investment banking summer analyst"; return "https://www.google.com/search?q="+encodeURIComponent(`${f.name} ${yr} ${role} application`); }
+function careersUrl(f){ return safeUrl(f.careers)||CAREERS[f.id]?.[0]||postingsUrl(f); }
+function firmNote(f){ return CAREERS[f.id]?.[1]||""; }
+function jobsFor(id){ return (S.firmJobs[id]?.items||[]); }
+function jobCount(id){ return jobsFor(id).filter(j=>j.cat==="IB"||j.cat==="PC").length; }
+
+/* ---------- Jobs ---------- */
+function mountJobs(){
+  $("#view").innerHTML=`<div class="grid2"><div class="stack">
+    <div class="card"><div class="card-h"><div><div class="eyebrow">Indeed · searched firm by firm</div><h2>Open roles at your firms</h2></div><div class="btn-row"><span class="faint mono" style="font-size:11px" id="jPulled"></span><button class="btn primary" data-act="pullJobs" id="jPull">Pull jobs</button></div></div>
+      <div class="card-b stack" style="gap:10px"><div class="toolbar" style="margin:0"><div class="chips" id="jView"></div><select class="in" id="jFirm" data-chg="jFirm" style="margin-left:auto"></select></div><div id="jFirmRes"></div></div></div>
+    <div class="card"><div class="card-h"><div><div class="eyebrow">Indeed · any employer</div><h3>Search IB and private credit roles</h3></div></div><div class="card-b stack" style="gap:12px">
+      <div><div class="lbl">Searches</div><div class="chips" id="jP" style="margin-top:6px"></div></div>
+      <div><div class="lbl">Cities</div><div class="chips" id="jL" style="margin-top:6px"></div></div>
+      <div class="btn-row"><button class="btn" data-act="runJobs" id="jRun">Search</button><label class="chk"><input type="checkbox" data-chg="jIbpc" ${S.jobs.ibpcOnly?"checked":""}> IB and private credit roles only</label><label class="chk"><input type="checkbox" data-chg="jOnly" ${S.jobs.onlyTargets?"checked":""}> Only my target firms</label><span class="hint" id="jHint" style="margin:0"></span></div>
+      <div id="jRes"></div>
+    </div></div></div>
+    <div class="stack"><div class="card"><div class="card-h"><div><div class="eyebrow">Official pages</div><h3>Careers pages and timing</h3></div></div><div class="card-b">
+      <p class="hint" style="margin:0 0 10px">Timing notes come from each firm's site as of October 2026. Confirm on the page before you plan around them. Most banks post internships on their own sites first, so check these even when Indeed shows nothing.</p>
+      <div id="jWatch"></div></div></div></div></div>`;
+}
+function jobRow(j,firm){
+  const f=firm||firmById(j.firmId);
+  return `<tr><td>${safeUrl(j.url)?`<a class="nm" href="${esc(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a>`:`<span class="nm">${esc(j.title)}</span>`}<div class="sub">${esc([j.level,j.pay].filter(Boolean).join(" · "))}</div></td>
+    <td>${esc(f?.name||j.company)}${j.cat&&j.cat!=="other"?` <span class="tag ${j.cat==="PC"?"t-PC":"t-EB"}">${j.cat}</span>`:""}${j.level==="Intern"?` <span class="tag tie">Intern</span>`:""}</td>
+    <td class="sub">${esc(j.location)}</td><td class="sub mono" style="white-space:nowrap">${esc(fmtDate(Date.parse(j.posted))||j.posted||"")}</td>
+    <td><button class="btn sm" data-act="jobTrack" data-key="${esc(j.key||"")}">Track</button></td></tr>`;
+}
+function allFirmJobs(){ const out=[]; for(const [id,d] of Object.entries(S.firmJobs)) for(const j of (d.items||[])) out.push({...j,firmId:id,key:id+"|"+(j.url||j.title)}); return out; }
+function updateJobs(){
+  const jp=$("#jP"); if(!jp) return;
+  const tgt=FIRMS.filter(f=>f.on);
+  // firm pulls
+  const pulled=Object.values(S.firmJobs).map(d=>d.pulledAt).filter(Boolean);
+  $("#jPulled").textContent=S.jobs.pulling?"":pulled.length?`pulled ${ago(Math.min(...pulled))}`:"not pulled yet";
+  $("#jPull").disabled=S.jobs.pulling||!tgt.length; $("#jPull").textContent=S.jobs.pulling?"Pulling…":`Pull jobs at ${tgt.length} firm${tgt.length===1?"":"s"}`;
+  const views=[["ibpc","IB & private credit"],["intern","Internships"],["all","All roles"]];
+  const all=allFirmJobs();
+  $("#jView").innerHTML=views.map(([k,l])=>{const n=all.filter(j=>k==="all"||(k==="intern"?j.level==="Intern":(j.cat==="IB"||j.cat==="PC"))).length;return `<button class="chip ${S.jobs.view===k?"on":""}" data-act="jView" data-k="${k}">${l}<span class="n">${n}</span></button>`;}).join("");
+  const fs=$("#jFirm"); if(fs&&!typing(document.activeElement)){ const ids=Object.keys(S.firmJobs).filter(id=>firmById(id)); fs.innerHTML=`<option value="">All firms</option>${ids.map(firmById).sort((a,b)=>a.name.localeCompare(b.name)).map(f=>`<option value="${f.id}" ${S.jobs.firm===f.id?"selected":""}>${esc(f.name)} (${jobsFor(f.id).length})</option>`).join("")}`; }
+  let rows=all.filter(j=>S.jobs.view==="all"||(S.jobs.view==="intern"?j.level==="Intern":(j.cat==="IB"||j.cat==="PC")));
+  if(S.jobs.firm) rows=rows.filter(j=>j.firmId===S.jobs.firm);
+  rows.sort((a,b)=>(Date.parse(b.posted)||0)-(Date.parse(a.posted)||0));
+  const fr=$("#jFirmRes");
+  if(!pulled.length&&!S.jobs.pulling) fr.innerHTML=`<div class="empty" style="padding:18px 8px"><h3>Pull roles from Indeed for each target firm</h3><p style="margin:0">Searches Indeed nationwide for each firm on your list, keeps only that firm's postings, and tags IB, private credit and internship roles. Takes about a minute.</p>${errsHTML(S.jobs.pullErrs)}</div>`;
+  else if(!rows.length) fr.innerHTML=`${errsHTML(S.jobs.pullErrs)}<p class="muted" style="margin:0;font-size:13px">${S.jobs.view==="intern"?"No internships listed on Indeed for these firms right now. Internship programs usually post on the careers pages at right.":"Nothing in this view yet."}</p>`;
+  else fr.innerHTML=`${errsHTML(S.jobs.pullErrs)}<div class="tbl-wrap" style="max-height:560px;overflow:auto"><table class="tbl"><thead><tr><th>Role</th><th>Firm</th><th>Location</th><th>Posted</th><th></th></tr></thead><tbody>${rows.slice(0,300).map(j=>jobRow(j)).join("")}</tbody></table></div>`;
+  // watch list
+  $("#jWatch").innerHTML=tgt.length?`<div class="stack" style="gap:0">${tgt.sort((a,b)=>a.name.localeCompare(b.name)).map(f=>{const a=Object.values(S.apps).find(x=>x.firmId===f.id);const n=jobCount(f.id);const d=S.firmJobs[f.id];return `<div style="padding:9px 0;border-top:1px solid var(--rule-2)"><div class="section-title" style="margin:0;gap:8px"><a class="nm" href="${esc(careersUrl(f))}" target="_blank" rel="noopener">${esc(f.name)} ↗</a><span class="btn-row" style="gap:6px">${n?`<button class="btn sm ghost" data-act="jobsFor" data-id="${f.id}">${n} open</button>`:d?`<span class="faint" style="font-size:12px">0 on Indeed</span>`:""}${a?`<span class="tag">${esc(a.status)}</span>`:`<button class="btn sm ghost" data-act="appNew" data-firm="${f.id}">Track</button>`}</span></div>${firmNote(f)?`<div class="sub faint" style="font-size:12px;margin-top:2px">${esc(firmNote(f))}</div>`:""}</div>`;}).join("")}</div>`:`<p class="faint">Mark target firms on the Firms tab.</p>`;
+  // open search
+  jp.innerHTML=JOB_PRESETS.map(j=>`<button class="chip ${S.jobs.presets.has(j.id)?"on":""}" data-act="jPreset" data-id="${j.id}">${j.label}</button>`).join("");
+  $("#jL").innerHTML=JOB_LOCS.map(l=>`<button class="chip ${S.jobs.locs.has(l)?"on":""}" data-act="jLoc" data-id="${esc(l)}">${esc(l)}</button>`).join("");
+  const n=S.jobs.presets.size*S.jobs.locs.size; $("#jHint").textContent=n>12?`${n} searches. Keep it to 12 or fewer.`:`${n} search${n===1?"":"es"}`;
+  $("#jRun").disabled=!n||n>12||S.jobs.running; $("#jRun").textContent=S.jobs.running?"Searching…":"Search";
+  const r=$("#jRes"); let sr=S.jobs.results; if(S.jobs.onlyTargets) sr=sr.filter(x=>x.firmId); if(S.jobs.ibpcOnly) sr=sr.filter(x=>x.cat==="IB"||x.cat==="PC");
+  if(!sr.length){ r.innerHTML=S.jobs.done?`<p class="muted" style="margin:0;font-size:13px">No matching postings. Try more cities or turn off the filters.</p>${errsHTML(S.jobs.errs)}`:errsHTML(S.jobs.errs); return; }
+  r.innerHTML=`${errsHTML(S.jobs.errs)}<div class="tbl-wrap" style="max-height:480px;overflow:auto"><table class="tbl"><thead><tr><th>Role</th><th>Company</th><th>Location</th><th>Posted</th><th></th></tr></thead><tbody>${sr.map(j=>jobRow(j,firmById(j.firmId)||{name:j.company})).join("")}</tbody></table></div>`;
+}
+async function pullFirmJobs(f){
+  const name=INDEED_Q[f.id]||f.name;
+  const qs=f.type==="PC"?[`${name} credit`,`${name} analyst`]:[`${name} investment banking`,`${name} analyst`];
+  const items=[], seen=new Set(); const nmRx=new RegExp("\\b"+name.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\b","i");
+  for(const q of qs){
+    const r=await call("Indeed","search_jobs",{search:q,location:"United States",country_code:"US"},{cache:{staleTime:300000,gcTime:6*3600000}});
+    for(const x of parseIndeed(r)){
+      if(!x.title) continue; const m=matchFirm(x.company);
+      if(!((m&&m.id===f.id)||(!m&&nmRx.test(String(x.company||""))))) continue;
+      const k=(x.url||x.title).toLowerCase(); if(seen.has(k)) continue; seen.add(k);
+      items.push({...x,...classifyJob(x.title,f)});
+    }
+  }
+  items.sort((a,b)=>(Date.parse(b.posted)||0)-(Date.parse(a.posted)||0));
+  const body={pulledAt:Date.now(),items:items.slice(0,40)};
+  S.firmJobs[f.id]=body; if(S.db) enqueue("j:"+f.id,()=>S.db.collection("jobs").doc(f.id).set(body)).catch(()=>{});
+  return items;
+}
+async function pullJobs(ids,quiet){
+  const firms=(ids||FIRMS.filter(f=>f.on).map(f=>f.id)).map(firmById).filter(Boolean); if(!firms.length) return;
+  S.jobs.pulling=true; S.jobs.pullErrs=[]; updateView();
+  const b=bulkStart("Pulling jobs from Indeed",firms.length); let roles=0, intern=0;
+  for(const f of firms){ if(b.stop) break;
+    try{ const items=await pullFirmJobs(f); roles+=items.filter(j=>j.cat==="IB"||j.cat==="PC").length; intern+=items.filter(j=>j.level==="Intern").length; }
+    catch(e){ S.jobs.pullErrs.push(`${f.name}: ${errText(e,"Indeed")}`); if(/needs_reauth|server_not|not_in_manifest|no_mcp|blocked|selection_required|approval_required/.test(e?.code||"")) break; }
+    bulkStep(f.name); if(S.tab==="jobs") updateJobs();
+  }
+  S.jobs.pulling=false; bulkEnd(); updateView();
+  if(!quiet||roles) toast(`Found ${roles} IB and private credit role${roles===1?"":"s"}${intern?`, ${intern} internship${intern===1?"":"s"}`:""} across ${firms.length} firm${firms.length===1?"":"s"}.`,"ok");
+}
+async function maybeAutoPull(){
+  if(S.jobs.autoPulled||S.jobs.pulling||!S.mcp||!S.perms||!S.ready.jobs) return; S.jobs.autoPulled=true;
+  const tgt=FIRMS.filter(f=>f.on); if(!tgt.length) return;
+  const stale=tgt.filter(f=>!S.firmJobs[f.id]||Date.now()-(S.firmJobs[f.id].pulledAt||0)>24*3600e3); if(!stale.length) return;
+  try{ if(await S.perms.state("mcp:Indeed")==="granted") pullJobs(stale.map(f=>f.id),true); }catch{}
+}
+function parseIndeed(md){
+  const text=typeof md==="string"?md:(md?.result??md?.text??JSON.stringify(md||""));
+  return String(text).split(/\*\*Job Title:\*\*/).slice(1).map(b=>{ const g=k=>{const m=b.match(new RegExp("\\*\\*"+k+":\\*\\*\\s*([^\\n]+)"));return m?m[1].trim():"";}; const url=(g("View Job URL").match(/https?:\/\/\S+/)||[""])[0]; return {title:b.split("\n")[0].trim(),company:g("Company"),location:g("Location"),posted:g("Posted on"),type:g("Job Type"),pay:g("Compensation"),url}; });
+}
+async function runJobs(){
+  const combos=[]; for(const id of S.jobs.presets) for(const loc of S.jobs.locs) combos.push([JOB_PRESETS.find(j=>j.id===id),loc]);
+  Object.assign(S.jobs,{running:true,results:[],errs:[],done:false}); updateJobs();
+  for(const [j,loc] of combos){
+    try{ const input={search:j.q,location:loc,country_code:"US"}; if(j.type) input.job_type=j.type;
+      const r=await call("Indeed","search_jobs",input,{cache:{staleTime:300000,gcTime:6*3600000}});
+      for(const x of parseIndeed(r)){ if(!x.title) continue; const k=(x.url||x.title+x.company).toLowerCase(); if(S.jobs.results.some(y=>(y.url||y.title+y.company).toLowerCase()===k)) continue; const f=matchFirm(x.company); x.firmId=f?.id||""; Object.assign(x,classifyJob(x.title,f)); x.key="s|"+k; S.jobs.results.push(x); }
+    }catch(e){ if(!S.jobs.errs.length) S.jobs.errs.push(errText(e,"Indeed")); }
+    updateJobs();
+  }
+  S.jobs.results.sort((a,b)=>(b.firmId?1:0)-(a.firmId?1:0)); S.jobs.running=false; S.jobs.done=true; updateJobs();
+}
+
+/* ---------- Applications ---------- */
+function mountApps(){
+  $("#view").innerHTML=`<div class="section-title"><div><div class="eyebrow">Recruiting</div><h2>Applications</h2></div><button class="btn primary" data-act="appNew">Add application</button></div>
+  <div id="aTable"></div>
+  <div class="card" style="margin-top:16px"><div class="card-h"><div><div class="eyebrow">Paste-ready answers</div><h3>Answer bank</h3></div><button class="btn" data-act="answersGen" id="ansBtn">Write my answers</button></div><div class="card-b" id="aBank"></div></div>`;
+}
+function updateApps(){
+  const tb=$("#aTable"); if(!tb) return;
+  const apps=Object.values(S.apps).sort((a,b)=>(Date.parse(a.deadline)||9e15)-(Date.parse(b.deadline)||9e15));
+  tb.innerHTML=!S.ready.apps?`<div class="card">${'<div class="skel"></div>'.repeat(3)}</div>`:!apps.length?`<div class="card empty"><h3>No applications tracked</h3><p>Add programs as firms post them. Track from the Jobs tab or add one here.</p></div>`:
+  `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Firm</th><th>Program</th><th>Deadline</th><th>Status</th><th>Your contacts there</th><th></th></tr></thead><tbody>
+  ${apps.map(a=>{const d=Date.parse(a.deadline);const f=firmById(a.firmId)||matchFirm(a.firm);const cs=f?(S.idx.byFirm[f.id]||[]):[];const talked=cs.filter(c=>["talked","thanked","advocate"].includes(c.stage));const sev=d&&!["Applied","Online test","HireVue","Superday","Offer","Rejected","Withdrawn"].includes(a.status)?(d<Date.now()+7*DAY?"crit":d<Date.now()+21*DAY?"warn":""):"";return `<tr>
+    <td class="nm">${esc(a.firm)}</td><td>${safeUrl(a.url)?`<a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.program||"Posting")} ↗</a>`:esc(a.program||"")}<div class="sub">${esc(a.location||"")}</div></td>
+    <td class="mono">${a.deadline?`${esc(fmtDate(d))}<div class="sub ${sev?"":"faint"}" style="color:${sev?`var(--${sev})`:""}">${dueText(d)}</div>`:`<span class="faint">rolling</span>`}</td>
+    <td><select class="in" data-chg="appStatus" data-id="${esc(a.id)}" style="font-size:12px;padding:4px 6px">${APP_STATUS.map(s=>`<option ${s===a.status?"selected":""}>${s}</option>`).join("")}</select></td>
+    <td class="sub">${cs.length?`${cs.length} people · ${talked.length} talked${talked.length?`<div>${talked.slice(0,3).map(c=>`<a href="#" data-act="open" data-id="${esc(c.id)}">${esc(c.name)}</a>`).join(", ")}</div>`:""}`:`<span class="faint">none yet</span>`}</td>
+    <td><button class="btn sm ghost" data-act="appEdit" data-id="${esc(a.id)}">Edit</button></td></tr>`;}).join("")}</tbody></table></div>`;
+  const ab=$("#aBank"); const ans=S.answers||{};
+  const Q=[["tellMe","Walk me through your background"],["whyIB","Why investment banking?"],["whyPC","Why private credit?"],["whyBoutique","Why a boutique over a bulge bracket?"],["strength","Your biggest strength"],["weakness","A weakness you're working on"],["team","A time you worked on a team"],["lead","A time you led something"]];
+  ab.innerHTML=Object.keys(ans).length?`<div class="stack" style="gap:12px">${Q.filter(([k])=>ans[k]).map(([k,l])=>`<div><div class="section-title" style="margin:0 0 4px"><strong>${l}</strong><button class="btn sm ghost" data-act="copyText" data-k="${k}">Copy</button></div><div class="prep">${esc(ans[k])}</div></div>`).join("")}</div>`:`<p class="muted" style="margin:0;font-size:13px">Claude writes first-person answers to the questions most applications and first rounds ask, from the resume text in Setup. Edit them, then paste into portals.</p>`;
+  $("#ansBtn").disabled=!!S.busy._answers; $("#ansBtn").textContent=S.busy._answers?"Writing…":(Object.keys(ans).length?"Rewrite answers":"Write my answers");
+}
+
+/* ---------- Resume ---------- */
+const RS_RULES = `- One page. For students, Education comes first: school, degree, expected graduation month and year, GPA if 3.5 or higher, honors, relevant coursework.
+- Each experience bullet starts with a strong action verb, past tense for past roles and present tense for a current role. No "I", "responsible for", "helped", "assisted with", "worked on", "various", "duties included".
+- Show results with numbers: dollar amounts, percentages, counts, time saved, assets covered. NEVER invent a number, client, deal or fact. If a number would make the line stronger but is not given, put a bracketed placeholder such as [$X] or [#] and say in "why" what real number to fill in.
+- Name real finance work only where the line supports it: DCF, LBO, comparable companies, precedent transactions, three-statement model, credit memo, covenant or leverage analysis, pitch materials, due diligence.
+- Aim for one printed line, about 100 to 115 characters. Two lines at most. Cut filler and repeated words.
+- Keep tense, date format and punctuation consistent across the page.
+- Activities and leadership: say what you built, led or grew, and the result.
+- Skills line: hard skills only (Excel, PowerPoint, Capital IQ, FactSet, Bloomberg, PitchBook, Python, SQL), languages, and two or three specific interests that start conversations.`;
+function rsSource(){ return ($("#rs-text")?.value ?? P().resumeText ?? "").replace(/\r/g,""); }
+function rsNumbered(text){ return text.split("\n").map(s=>s.replace(/\s+$/,"")).filter(s=>s.trim()).map((s,i)=>({n:i+1,text:s.trim()})); }
+function rsFinal(){ return S.rs.lines.map(l=>l.decision==="accept"&&l.rewrite?l.rewrite:l.decision==="edit"&&l.edited?l.edited:l.text).join("\n"); }
+let rsSaveT=0;
+function rsPersist(){ S.rs.dirty=true; clearTimeout(rsSaveT); rsSaveT=setTimeout(async()=>{ if(!S.db) return; const body={lines:S.rs.lines.slice(0,160),overall:S.rs.overall,keywords:S.rs.keywords,target:S.rs.target,at:Date.now()}; try{ await enqueue("rs",()=>S.db.doc("config/resumeReview").set(JSON.parse(JSON.stringify(body)))); }catch(e){ toast(dbErr(e),"crit"); } S.rs.dirty=false; },800); }
+function mountResume(){
+  const p=P(), r=S.rs;
+  $("#view").innerHTML=`<div class="grid2"><div class="stack">
+    <div class="card"><div class="card-h"><div><div class="eyebrow">Resume fixer</div><h2>Line-by-line review</h2></div><div class="btn-row"><button class="btn primary" data-act="rsRun" id="rsRun">Review every line</button></div></div><div class="card-b stack" style="gap:10px">
+      <label class="lbl">Your resume as text (paste from Word; one line per bullet)<textarea class="in" id="rs-text" rows="14" placeholder="Paste your resume here. It also fills from the resume text in Setup.">${esc(p.resumeText||"")}</textarea></label>
+      <div class="form-grid"><label class="lbl">Optimize for<select class="in" id="rs-target" data-chg="rsTarget" style="width:100%"><option value="general" ${r.target==="general"?"selected":""}>IB and private credit, general</option><option value="ib" ${r.target==="ib"?"selected":""}>Investment banking</option><option value="pc" ${r.target==="pc"?"selected":""}>Private credit</option><option value="jd" ${r.target==="jd"?"selected":""}>A specific job posting</option></select></label>
+      <div class="btn-row" style="align-self:end"><button class="btn sm ghost" data-act="rsSaveText">Save as my resume text</button></div></div>
+      <label class="lbl" id="rs-jd-wrap" ${r.target==="jd"?"":"hidden"}>Job posting text<textarea class="in" id="rs-jd" rows="6" placeholder="Paste the full posting, including qualifications">${esc(r.jd||"")}</textarea></label>
+      <p class="hint" style="margin:0">Claude scores each line, explains what's weak, and suggests a rewrite that keeps your facts. Missing numbers come back as [placeholders] for you to fill, never made up. Formatting (bold, tabs, dates on the right) stays in your Word file; this fixes the words.</p>
+    </div></div>
+    <div id="rsReview"></div></div>
+    <div class="stack"><div class="card"><div class="card-h"><h3>Final version</h3><div class="btn-row"><button class="btn sm" data-act="rsCopy">Copy</button><button class="btn sm ghost" data-act="rsDownload">Download .txt</button></div></div><div class="card-b"><div id="rsFinal"></div><div class="btn-row" style="margin-top:10px"><button class="btn sm" data-act="rsAdopt">Use final as my resume text</button></div></div></div>
+    <div class="card"><div class="card-h"><h3>What a strong IB line looks like</h3></div><div class="card-b"><div class="prep" style="font-size:12px">${esc(RS_RULES.replace(/^- /gm,"• "))}</div></div></div></div></div>`;
+}
+function updateResume(){
+  const el=$("#rsReview"); if(!el) return; const r=S.rs;
+  const ae=document.activeElement; if(ae&&ae.dataset&&ae.dataset.rsedit!=null){ const fin=$("#rsFinal .final"); if(fin) fin.textContent=rsFinal(); return; }
+  $("#rsRun").disabled=r.running; $("#rsRun").textContent=r.running?"Reviewing…":(r.lines.length?"Review again":"Review every line");
+  const fin=$("#rsFinal"); if(fin) fin.innerHTML=r.lines.length?`<div class="final">${esc(rsFinal())}</div><p class="hint">${r.lines.filter(l=>l.decision==="accept"||l.decision==="edit").length} of ${r.lines.filter(l=>l.rewrite).length} suggestions applied.</p>`:`<p class="muted" style="margin:0;font-size:13px">Your updated resume builds here as you accept changes.</p>`;
+  if(r.running){ el.innerHTML=`<div class="card card-b" style="padding-top:16px"><p class="muted" style="margin:0">Reading every line. This takes 30 to 90 seconds for a full page.</p>${'<div class="skel"></div>'.repeat(4)}</div>`; return; }
+  if(!r.lines.length){ el.innerHTML=""; return; }
+  const o=r.overall||{}; const sevOf=s=>s<=2?"crit":s===3?"warn":"ok";
+  const pend=r.lines.filter(l=>l.rewrite&&(!l.decision||l.decision==="pending")).length;
+  el.innerHTML=`<div class="card"><div class="card-h"><div><div class="eyebrow">Overall</div><h3>${o.score!=null?`<span class="mono">${esc(o.score)}/10</span> · `:""}${esc(o.summary||"")}</h3></div><div class="btn-row">${pend?`<button class="btn sm primary" data-act="rsAcceptAll">Accept all ${pend}</button>`:""}</div></div>
+    <div class="card-b">${(o.topFixes||[]).length?`<ul style="margin:0 0 6px;padding-left:18px;font-size:13px">${o.topFixes.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:""}
+    ${(r.keywords||[]).length?`<p style="margin:6px 0 0;font-size:13px"><strong>Keywords to work in, where true:</strong> ${r.keywords.map(k=>`<span class="tag">${esc(k)}</span>`).join(" ")}</p>`:""}</div>
+    <div>${r.lines.map((l,i)=>{const has=!!l.rewrite; const dec=l.decision||"pending"; const sev=has?sevOf(Number(l.score)||3):"info";
+      return `<div class="rs-row sev-${sev} ${dec==="accept"||dec==="edit"?"done":""} ${dec==="keep"?"kept":""}"><span class="stripe"></span>
+      <div><div class="orig">${esc(l.text)}</div>${(l.issues||[]).length?`<div style="margin-top:4px">${l.issues.map(x=>`<span class="tag">${esc(x)}</span>`).join(" ")}</div>`:""}</div>
+      <div class="sugg-col">${has?(dec==="edit"?`<textarea class="in" rows="3" data-rsedit="${i}">${esc(l.edited||l.rewrite)}</textarea>`:`<div class="sugg">${esc(l.rewrite)}</div>`)+`${l.why?`<div class="hint" style="margin-top:4px">${esc(l.why)}</div>`:""}<div class="btn-row" style="margin-top:6px"><button class="btn sm ${dec==="accept"?"primary":""}" data-act="rsDec" data-i="${i}" data-k="accept">${dec==="accept"?"Accepted":"Accept"}</button><button class="btn sm ghost" data-act="rsDec" data-i="${i}" data-k="edit">Edit</button><button class="btn sm ghost" data-act="rsDec" data-i="${i}" data-k="keep">${dec==="keep"?"Kept original":"Keep original"}</button><button class="btn sm ghost" data-act="rsRetry" data-i="${i}" ${r.busyLine===i?"disabled":""}>${r.busyLine===i?"Rewriting…":"Try another"}</button></div>`
+        :`<div class="hint" style="margin:0">${l.kind==="bullet"?"Strong as written.":esc(l.why||"No change needed.")}</div>`}</div></div>`;}).join("")}</div></div>`;
+}
+function rsPromptTarget(){ const t=S.rs.target; return t==="ib"?"investment banking summer analyst roles":t==="pc"?"private credit and direct lending internships":t==="jd"?"the job posting below":"investment banking and private credit internships"; }
+async function rsRun(){
+  const text=rsSource(); const lines=rsNumbered(text); if(lines.length<5) return toast("Paste your full resume first.","warn"); if(lines.length>160) return toast("That's more than 160 lines. Paste just the resume.","warn");
+  S.rs.jd=($("#rs-jd")?.value||"").trim(); if(S.rs.target==="jd"&&S.rs.jd.length<80) return toast("Paste the job posting text first.","warn");
+  S.rs.running=true; updateResume();
+  try{
+    const out=await askJSON(`You are a senior investment banking recruiter reviewing a college student's resume for ${rsPromptTarget()}. Review EVERY numbered line below.
+
+THE STUDENT
+${meText()}
+
+STANDARDS FOR A STRONG LINE
+${RS_RULES}
+${S.rs.target==="jd"?`\nTAILOR TO THIS POSTING. Only suggest posting keywords a line can honestly support.\n"""\n${S.rs.jd.slice(0,8000)}\n"""\n`:""}
+FOR EACH LINE return {"n":<line number>,"kind":"name|contact|section|school|role|bullet|skills|other","score":1-5,"issues":["2 to 4 word phrase"],"rewrite":"improved line, or empty string if it is already strong or is a name, contact, section title, or employer/title/date line","why":"one short sentence"}.
+Keep every fact identical. Do not merge or split lines. Do not use em dashes.
+
+Return only JSON: {"overall":{"score":1-10,"summary":"one sentence","topFixes":["3 to 5 specific fixes, most important first"]},"lines":[...one object per line, in order...],"missingKeywords":["up to 10 keywords recruiters scan for that are missing and could be added honestly"]}
+
+RESUME
+${lines.map(l=>`${l.n}: ${l.text}`).join("\n")}`,{modelTier:"default"});
+    const by={}; for(const x of (out?.lines||[])) if(x&&x.n!=null) by[Number(x.n)]=x;
+    S.rs.lines=lines.map(l=>{ const x=by[l.n]||{}; const rw=tidy(String(x.rewrite||"")).trim(); return {n:l.n,text:l.text,kind:String(x.kind||"other"),score:Number(x.score)||null,issues:Array.isArray(x.issues)?x.issues.slice(0,4).map(String):[],rewrite:rw&&rw!==l.text?rw:"",why:String(x.why||""),decision:"pending"}; });
+    S.rs.overall={score:out?.overall?.score??null,summary:String(out?.overall?.summary||""),topFixes:Array.isArray(out?.overall?.topFixes)?out.overall.topFixes.slice(0,6).map(String):[]};
+    S.rs.keywords=Array.isArray(out?.missingKeywords)?out.missingKeywords.slice(0,12).map(String):[];
+    rsPersist();
+  }catch(e){ toast(sampleErr(e),"crit"); }
+  S.rs.running=false; updateResume();
+}
+async function rsRetry(i){
+  const l=S.rs.lines[i]; if(!l) return; S.rs.busyLine=i; updateResume();
+  try{ const ctx=S.rs.lines.slice(Math.max(0,i-3),i+3).map(x=>x.text).join("\n");
+    const o=await askJSON(`Rewrite one line from a student's ${rsPromptTarget()} resume a different way than before. Keep every fact identical; use [placeholders] for numbers that are not given. No em dashes.
+
+STANDARDS
+${RS_RULES}
+
+NEARBY LINES FOR CONTEXT
+${ctx}
+
+LINE TO REWRITE
+${l.text}
+
+PREVIOUS SUGGESTION (write something different)
+${l.rewrite||"(none)"}
+
+Return only JSON: {"rewrite":"","why":"one short sentence"}`,{modelTier:"quick"});
+    if(o?.rewrite){ l.rewrite=tidy(String(o.rewrite)); l.why=String(o.why||l.why); l.decision="pending"; delete l.edited; rsPersist(); } }
+  catch(e){ toast(sampleErr(e),"crit"); }
+  S.rs.busyLine=null; updateResume();
+}
+
+/* ---------- Setup ---------- */
+function mountSetup(){
+  const p=P();
+  $("#view").innerHTML=`<div class="grid2"><div class="stack">
+  <div class="card"><div class="card-h"><div><div class="eyebrow">Sender profile</div><h2>About you</h2></div><button class="btn primary" data-act="saveSetup">Save</button></div><div class="card-b">
+    <div class="form-grid">
+      <label class="lbl">Full name<input class="in" id="sp-name" value="${esc(p.name)}"></label>
+      <label class="lbl">School, as written in emails<input class="in" id="sp-school" value="${esc(p.school)}"></label>
+      <label class="lbl">Year<input class="in" id="sp-year" value="${esc(p.year)}" placeholder="Sophomore"></label>
+      <label class="lbl">Graduation year<input class="in" id="sp-grad" value="${esc(p.gradYear)}" placeholder="2029"></label>
+      <label class="lbl">Major<input class="in" id="sp-major" value="${esc(p.major)}"></label>
+      <label class="lbl">Interest, in your words<input class="in" id="sp-focus" value="${esc(p.focus)}"></label>
+      <label class="lbl full">Availability sentence (Central Time)<textarea class="in" id="sp-avail" rows="2">${esc(p.availability)}</textarea></label>
+      <label class="lbl full">Things you share with people (one per line). Claude only claims one when their profile shows it.<textarea class="in" id="sp-ties" rows="5">${esc((p.ties||[]).join("\n"))}</textarea></label>
+      <label class="lbl">Follow up after (days)<input class="in" id="sp-fu" type="number" min="3" max="14" value="${esc(p.followUpDays)}"></label>
+      <label class="lbl">Sends per day, at most<input class="in" id="sp-cap" type="number" min="1" max="60" value="${esc(p.dailyCap)}"></label>
+      <label class="lbl">New leads per day, goal<input class="in" id="sp-goal" type="number" min="1" max="300" value="${esc(p.dailyLeadGoal)}"></label>
+      <label class="chk" style="align-self:end"><input type="checkbox" id="sp-ut" ${p.utSignoff?"checked":""}> Sign off "Best, and Hook 'em!" to UT alumni</label>
+    </div></div></div>
+  <div class="card"><div class="card-h"><div><div class="eyebrow">Search</div><h3>How to match your school</h3></div></div><div class="card-b form-grid">
+    <label class="lbl full">School names as they appear on LinkedIn (one per line)<textarea class="in" id="sp-schools" rows="3">${esc((p.schoolNames||[]).join("\n"))}</textarea></label>
+    <label class="lbl">Also match any school containing<input class="in" id="sp-kw" value="${esc(p.schoolKeyword)}"></label>
+    <label class="lbl">LinkedIn school page slug<input class="in" id="sp-li" value="${esc(p.linkedinSchool)}"></label>
+  </div></div>
+  <div class="card"><div class="card-h"><div><div class="eyebrow">Resume</div><h3>Attached to every first email</h3></div></div><div class="card-b stack" style="gap:10px">
+    <div class="btn-row"><input type="file" id="sp-file" accept="application/pdf" data-chg="resumeFile" style="max-width:100%"><span class="muted" id="sp-filenote" style="font-size:13px">${p.resume?.name?`Current: ${esc(p.resume.name)}`:"No PDF uploaded yet"}</span></div>
+    <label class="lbl">Resume text, pasted (Claude uses this for answers and call prep)<textarea class="in" id="sp-rtext" rows="8">${esc(p.resumeText)}</textarea></label>
+  </div></div>
+  </div>
+  <div class="stack">
+    <div class="card"><div class="card-h"><h3>Connectors</h3><button class="btn sm" data-act="checkConns">Check</button></div><div class="card-b" id="spConns"></div></div>
+    <div class="card"><div class="card-h"><h3>Your data</h3></div><div class="card-b stack" style="gap:8px;font-size:13px">
+      <button class="btn" data-act="exportCSV">Export pipeline as CSV</button>
+      <button class="btn" data-act="exportFinder">Export leads for your email finder</button>
+      <button class="btn" data-act="bulkOpen" data-tabx="csv">Import a CSV</button>
+      <p class="hint">Everything lives in this artifact's private storage. Only you can read or change it unless you share the page with edit access.</p>
+    </div></div>
+  </div></div>`;
+}
+function updateSetup(){
+  const el=$("#spConns"); if(!el) return;
+  const rows=[["Clay","Alumni search by school, verified emails, work history"],["Gmail","Drafts, sending, reply and bounce tracking"],["Indeed","Job postings"]];
+  el.innerHTML=`<div class="legend" style="gap:8px 12px">${rows.map(([n,d])=>{const s=S.conn[n];return `<span><strong>${n}</strong><div class="faint" style="font-size:12px">${d}</div></span><span class="conn"><span class="dot ${s==="ok"?"ok":s==="reauth"?"warn":s==="missing"?"crit":""}"></span>${s==="ok"?"ready":s==="reauth"?"reconnect":s==="missing"?"add in Settings":"…"}</span>`;}).join("")}</div>
+  <p class="hint">Add or reconnect connectors in claude.ai Settings → Connectors. ${S.perms?`<button class="btn sm ghost" data-act="perms">Page permissions</button>`:""}</p>`;
+  const fn=$("#sp-filenote"); if(fn&&!typing(document.activeElement)) fn.textContent=P().resume?.name?`Current: ${P().resume.name}`:"No PDF uploaded yet";
+}
+function readSetup(){
+  const v=id=>($("#"+id)?.value??"").trim(); const lines=id=>v(id).split("\n").map(s=>s.trim()).filter(Boolean);
+  return {name:v("sp-name"),school:v("sp-school"),year:v("sp-year"),gradYear:v("sp-grad"),major:v("sp-major"),focus:v("sp-focus"),availability:v("sp-avail"),ties:lines("sp-ties"),
+    followUpDays:Number(v("sp-fu"))||6,dailyCap:Number(v("sp-cap"))||20,dailyLeadGoal:Number(v("sp-goal"))||50,utSignoff:!!$("#sp-ut")?.checked,
+    schoolNames:lines("sp-schools"),schoolKeyword:v("sp-kw"),linkedinSchool:v("sp-li"),resumeText:($("#sp-rtext")?.value||"").slice(0,20000)};
+}
+
+/* ---------- drawer ---------- */
+function openContact(id,kind){ if(!S.contacts[id]) return; S.open=id; S.confirmDel=null; S.sendAsk=null; if(kind) S.kind[id]=kind; else if(!S.kind[id]){ const a=nextAction(S.contacts[id]); S.kind[id]=a?.kind||"cold"; }
+  { const k=S.kind[id]; if((k==="fu1"||k==="fu2")&&!curDraft(id)) S.drafts[id+":"+k]=followupTemplate(S.contacts[id],k); }
+  $("#drawer").hidden=false; $("#scrim").hidden=false; renderDrawer(true); $("#drawer").scrollTop=0; }
+function closeDrawer(){ S.open=null; $("#drawer").hidden=true; $("#scrim").hidden=true; }
+function curDraft(id){ const k=S.kind[id]||"cold"; const c=S.contacts[id]||{}; return S.drafts[id+":"+k] || (c.draft&&c.draft.kind===k?c.draft:null); }
+function renderDrawer(force){
+  const dr=$("#drawer"); if(!S.open||dr.hidden) return;
+  if(!force && dr.contains(document.activeElement) && typing(document.activeElement)){ S.drawerDirty=true; return; }
+  S.drawerDirty=false;
+  const c=S.contacts[S.open]; if(!c){ closeDrawer(); return; }
+  const f=firmOf(c), st=stageOf(c.stage), a=nextAction(c), kind=S.kind[c.id]||"cold", d=curDraft(c.id), busy=S.busy[c.id]||"", p=P();
+  const info=f?S.idx.pat[f.id]:null; const id=esc(c.id);
+  const followup=["fu1","fu2","thanks","checkin"].includes(kind);
+  const sa=S.sendAsk===c.id;
+  dr.innerHTML=`<div class="dr-head"><div style="min-width:0"><div class="eyebrow">${esc(f?.name||c.firm||"Firm unknown")}${f?` · ${TYPES[f.type]}`:""}</div><h2>${esc(c.name)}</h2><div class="muted">${esc(c.title||"")}${c.location?` · ${esc(c.location)}`:""}</div></div><button class="icon-btn" data-act="closeDrawer" aria-label="Close">×</button></div>
+  <div class="dr-bar"><label class="lbl">Stage<select class="in" data-chg="stage" data-id="${id}">${STAGES.map(s=>`<option value="${s.id}" ${s.id===c.stage?"selected":""}>${s.label}</option>`).join("")}</select></label>
+    ${safeUrl(c.linkedin)?`<a class="btn sm" href="${esc(c.linkedin)}" target="_blank" rel="noopener">LinkedIn ↗</a>`:""}
+    ${safeUrl(c.lastDraft?.url)?`<a class="btn sm" href="${esc(c.lastDraft.url)}" target="_blank" rel="noopener">Gmail draft ↗</a>`:""}
+    ${c.emailedAt?`<span class="mono faint" style="font-size:12px;padding-bottom:6px">first email ${fmtDate(c.emailedAt)} · ${tPlus(c.emailedAt)}</span>`:""}</div>
+  ${a?`<div class="next sev-${a.sev}"><div><div class="eyebrow">Next step</div><strong>${esc(a.label)}</strong> <span class="mono faint">${a.due!=null?dueText(a.due):""}</span></div>${nextBtn(c,a)}</div>`:""}
+
+  <section class="dr-sec"><h3>Email address</h3>
+    <div class="field-row"><input class="in" type="email" data-field="email" data-id="${id}" value="${esc(c.email||"")}" placeholder="name@firm.com">${c.email?srcHTML(c):""}</div>
+    <div class="btn-row"><button class="btn sm" data-act="findEmail" data-id="${id}" ${busy?"disabled":""}>${busy==="email"?"Looking up in Clay…":"Verify with Clay"}</button><button class="btn sm ghost" data-act="guessOne" data-id="${id}">Use firm format</button></div>
+    <p class="hint" style="margin:0">${f?`${esc(f.name)} format: <span class="mono">${esc(info?.pat||f.pat)}@${esc(f.mail||"?")}</span>, ${esc(info?.why||"")}.`:`Firm not in your list. <button class="btn sm ghost" data-act="firmAdd" data-name="${esc(c.firm||"")}">Add ${esc(c.firm||"firm")}</button>`}${(c.bounced||[]).length?` Bounced before: ${c.bounced.map(esc).join(", ")}.`:""}</p>
+  </section>
+
+  <section class="dr-sec"><h3>Write <span class="faint" style="font-weight:500;font-size:12px">${esc(KIND[kind])}</span></h3>
+    <div class="seg">${Object.keys(KIND).map(k=>`<button class="seg-b ${k===kind?"on":""}" data-act="kind" data-k="${k}" data-id="${id}">${KIND[k]}</button>`).join("")}</div>
+    ${kind==="referral"?`<input class="in" data-field="referrer" data-id="${id}" value="${esc(c.referrer||"")}" placeholder="Who referred you? Full name">`:""}
+    ${["thanks","checkin"].includes(kind)&&!c.notes?`<p class="hint" style="margin:0">Add call notes below first so the note can mention something specific.</p>`:""}
+    <div class="btn-row"><button class="btn" data-act="write" data-id="${id}" ${busy?"disabled":""}>${busy==="compose"?"Writing…":d?"Rewrite":"Write it"}</button>${kind==="cold"||kind==="referral"?`<span class="hint" style="margin:0">5 sentences, your voice, built from their profile.</span>`:""}</div>
+    <input class="in" data-draft="subject" data-id="${id}" value="${esc(d?.subject||"")}" placeholder="Subject">
+    <textarea class="in" rows="12" data-draft="body" data-id="${id}" placeholder="The email appears here. Edit anything before saving.">${esc(d?.body||"")}</textarea>
+    ${d?.note?`<p class="hint" style="margin:0">${esc(d.note)}</p>`:""}
+    ${sa?`<div class="banner warn" style="margin:0"><div><strong>Send to ${esc(c.email||"?")} now?</strong><div style="font-size:12px">${followup?"Goes in the same Gmail thread when the desk has seen your first email.":(p.resume?.url?"Your resume PDF goes with it.":"No resume attached. Add your PDF in Setup or attach it in Gmail instead.")}</div></div><div class="btn-row"><button class="btn sm primary" data-act="sendNow" data-id="${id}">Send</button><button class="btn sm ghost" data-act="sendCancel">Cancel</button></div></div>`:
+    `<div class="btn-row"><button class="btn primary" data-act="gmailDraft" data-id="${id}" ${!d||!c.email||busy?"disabled":""}>${busy==="gmail"?"Saving…":"Save to Gmail drafts"}</button><button class="btn" data-act="sendAsk" data-id="${id}" ${!d||!c.email||busy?"disabled":""}>Send now…</button><button class="btn ghost" data-act="copyDraft" data-id="${id}" ${d?"":"disabled"}>Copy</button></div>`}
+    <p class="hint" style="margin:0">${kind==="cold"||kind==="referral"?(p.resume?.url?`Resume attaches automatically (${esc(p.resume.name||"PDF")}).`:`Upload your resume PDF in Setup to attach it automatically.`):""}</p>
+  </section>
+
+  <section class="dr-sec"><h3>Call</h3>
+    <div class="form-grid"><label class="lbl">Call time<input class="in" type="datetime-local" data-field="callAt" data-id="${id}" value="${toLocalInput(c.callAt)}"></label>
+    <div class="btn-row" style="align-self:end"><button class="btn sm" data-act="prep" data-id="${id}" ${busy?"disabled":""}>${busy==="prep"?"Prepping…":"Prep me"}</button><button class="btn sm" data-act="markTalked" data-id="${id}">Mark call done</button></div></div>
+    ${c.prep?`<div class="prep">${esc(c.prep)}</div>`:""}
+    <label class="lbl">Call notes<textarea class="in" rows="4" data-field="notes" data-id="${id}" placeholder="What they said, advice, who they'll introduce you to">${esc(c.notes||"")}</textarea></label>
+  </section>
+
+  <section class="dr-sec"><h3>Profile</h3>
+    <dl class="kv">
+      ${c.insight?`<dt>Best hook</dt><dd>${esc(c.insight)}</dd>`:""}
+      ${(c.ties||[]).length?`<dt>Shared ties</dt><dd>${c.ties.map(t=>`<span class="tag tie">${esc(t)}</span>`).join(" ")}</dd>`:""}
+      ${c.group?`<dt>Group</dt><dd>${esc(c.group)}</dd>`:""}
+      ${(c.schools||[]).length?`<dt>Schools</dt><dd>${c.schools.map(s=>esc([s.name,s.degree,s.years].filter(Boolean).join(", "))).join("<br>")}</dd>`:c.school?`<dt>School</dt><dd>${esc(c.school)}</dd>`:""}
+      ${(c.priorRoles||[]).length?`<dt>Before</dt><dd>${c.priorRoles.slice(0,5).map(r=>esc([r.title,r.firm,r.years].filter(Boolean).join(", "))).join("<br>")}</dd>`:""}
+      ${c.startedRole?`<dt>In role since</dt><dd class="mono">${esc(c.startedRole)}</dd>`:""}
+      ${c.background?`<dt>Background</dt><dd>${esc(c.background)}</dd>`:""}
+      ${c.source?`<dt>Source</dt><dd>${esc(c.source)}</dd>`:""}
+    </dl>
+    <details><summary>Update from their LinkedIn page</summary><textarea class="in" rows="5" id="dr-repaste" placeholder="Paste the full profile text here" style="margin-top:6px"></textarea><div class="btn-row" style="margin-top:6px"><button class="btn sm" data-act="reparse" data-id="${id}" ${busy?"disabled":""}>${busy==="parse"?"Reading…":"Read profile"}</button><button class="btn sm ghost" data-act="clayHistory" data-id="${id}" ${busy?"disabled":""}>Pull work history from Clay</button></div></details>
+    ${c.profileText?`<details><summary>Pasted profile text</summary><div class="pretext">${esc(c.profileText)}</div></details>`:""}
+  </section>
+
+  ${(c.log||[]).length?`<section class="dr-sec"><h3>History</h3><div class="log">${c.log.map(l=>`<div><span class="mono faint">${fmtDate(l.t)}</span><span>${esc(l.d)}</span></div>`).join("")}</div></section>`:""}
+  <section class="dr-sec"><div class="btn-row">${S.confirmDel===c.id?`<span class="muted">Delete ${esc(c.name)} and their history?</span><button class="btn sm danger" data-act="delYes" data-id="${id}">Delete</button><button class="btn sm ghost" data-act="delNo">Keep</button>`:`<button class="btn sm ghost danger" data-act="delAsk" data-id="${id}">Delete contact</button>`}</div></section>`;
+}
+
+/* ---------- Claude prompts ---------- */
+function meText(){ const p=P(); return [`Name: ${p.name||"(not set)"}`,`School: ${p.school}, ${p.major}, ${p.year}${p.gradYear?`, class of ${p.gradYear}`:""}`,`Interest: ${p.focus}`,`Background and ties: ${(p.ties||[]).join("; ")}`].join("\n"); }
+function contactText(c){
+  const f=firmOf(c);
+  return [`Name: ${c.name}`,`Firm: ${f?.name||c.firm||""}${f?` (${TYPES[f.type]})`:""}`,`Title: ${c.title||""}`,c.group&&`Group: ${c.group}`,c.location&&`Location: ${c.location}`,c.startedRole&&`In current role since: ${c.startedRole}`,
+    (c.schools||[]).length?`Schools: ${c.schools.map(s=>[s.name,s.degree,s.years].filter(Boolean).join(", ")).join(" | ")}`:(c.school&&`School: ${c.school}`),
+    (c.priorRoles||[]).length&&`Prior roles: ${c.priorRoles.map(r=>[r.title,r.firm,r.years].filter(Boolean).join(", ")).join(" | ")}`,
+    (c.ties||[]).length&&`Shared ties already found: ${c.ties.join("; ")}`,c.hometown&&`Hometown: ${c.hometown}`,c.insight&&`Most specific detail on their profile: ${c.insight}`,
+    (c.activity||[]).length&&`Their posts: ${c.activity.join(" | ")}`,(c.deals||[]).length&&`Deals listed: ${c.deals.join(" | ")}`,c.background&&`Work history notes: ${c.background}`].filter(Boolean).join("\n");
+}
+function defaultSubject(c,kind){
+  const p=P(), f=firmOf(c), tr=trackFor(f), firm=f?.name||c.firm||"your firm";
+  const base=`${p.school} ${/bba|finance/i.test(p.major)?"BBA ":""}Interested in ${tr.short} at ${firm}`.replace(/\s+/g," ");
+  if(kind==="referral"&&c.referrer) return `Referred by ${c.referrer} / ${base}`;
+  if(isUT(c)&&/texas|mccombs|ut austin/i.test(p.school)) return `Fellow Longhorn / ${base}`;
+  return base;
+}
+function emailPrompt(c,kind){
+  const p=P(), f=firmOf(c), tr=trackFor(f), first=splitName(c.name).first||c.first, firm=f?.name||c.firm||"their firm";
+  const signoff=(p.utSignoff&&isUT(c))?"Best, and Hook 'em!":"Best,";
+  if(kind==="thanks"||kind==="checkin"){
+    return `Write a short ${kind==="thanks"?"thank-you note after a networking call":"check-in email to someone the sender spoke with a month or more ago"} from a college student to a finance professional.
+
+SENDER
+${meText()}
+
+RECIPIENT
+${contactText(c)}
+
+CALL NOTES (the only source for anything specific about the call)
+${c.notes||"(none)"}
+
+RULES
+- Greeting "Hi ${first},". ${kind==="thanks"?"3 to 4 sentences: thank them, name one specific piece of advice or story from the notes, say how you'll act on it, close warmly.":"3 sentences: a brief update tied to their advice if the notes give one, a thank-you, and no request beyond staying in touch."}
+- Never invent details that are not in the notes. If the notes are empty, keep it general.
+- Formal but warm, active voice. No em dashes. No hype words.
+- Sign-off on its own line: "Best," then "${p.name}" on the next line.
+- Subject: "${kind==="thanks"?"Thank you":"Quick update"}, ${p.name}" unless replying in a thread.
+
+Return only JSON: {"subject":"","body":""}`;
+  }
+  return `Write a ${kind==="referral"?"referral":"cold"} networking email from a college student to a finance professional. Follow every rule exactly.
+
+SENDER
+${meText()}
+Availability: ${p.availability||"flexible over the next two weeks"}
+
+RECIPIENT (use only these facts; never invent a deal, post, role, or detail)
+${contactText(c)}
+${kind==="referral"?`Referred by: ${c.referrer||"(name missing)"}`:""}
+
+THE EMAIL: exactly five sentences between the greeting and the sign-off.
+1. "My name is ${p.name}, and I am a ${String(p.year||"student").toLowerCase()} studying ${p.major} at ${p.school} with an interest in ${tr.long} at ${firm}."
+2. ${kind==="referral"?`"${c.referrer||"[Referrer]"} mentioned you would be a great person to learn from, and I noticed [real connection]." If there is no real connection, end the sentence after "learn from."`:`Connection: "I noticed [real connection, e.g. you are also a McCombs graduate], and I would value hearing how that path led you to [their group or firm]." Claim a connection only if the recipient facts support it (a shared school, org, hometown or activity from the sender's list). If none: "I noticed your path from [prior school or firm] to [group or firm], and I would value hearing what drew you to that work."`}
+3. One specific observation from their profile, turned into something to learn from them. Use a DIFFERENT detail than sentence 2. Prefer, in order: a career switch or lateral move, a post they wrote, a deal they list, an unusual background tied to their work. If they are an incoming or current summer analyst, asking how they approached recruiting is a good fallback. If the profile is thin, ask about the work in their group in plain terms. Never invent.
+4. "If you have 10 to 15 minutes in the coming weeks, I am available ${p.availability||"[availability]"}, and I am happy to work around your schedule."
+5. "Thank you for your time, and I have attached my resume for your reference."
+
+FORMAT
+- First line: "Hi ${first},"  then a blank line, then the five sentences as one paragraph, then a blank line.
+- Sign-off: "${signoff}" then "${p.name}" on the next line.
+- Formal but warm, active voice, full sentences. No em dashes. No hype or AI-sounding words (passionate, dive into, game-changing, leverage, delve).
+- Subject: exactly "${defaultSubject(c,kind)}"
+
+Return only JSON: {"subject":"","body":"","connection":"the connection used, or none","insightUsed":"the detail sentence 3 is built on","unverified":"anything you were unsure of, or empty"}`;
+}
+function followupTemplate(c,kind){
+  const p=P(), f=firmOf(c), first=splitName(c.name).first||c.first, firm=f?.name||c.firm||"your firm";
+  const subject="Re: "+(c.subject||defaultSubject(c,c.referrer?"referral":"cold"));
+  const body=kind==="fu1"
+    ? `Hi ${first},\n\nI wanted to follow up on my previous note about a 10 to 15 minute call to hear about your experience at ${firm}. I remain available ${p.availability||"over the next few weeks"}, and I am happy to work around your schedule. Thank you again for considering it.\n\nBest,\n${p.name}`
+    : `Hi ${first},\n\nI wanted to reach out one more time in case my earlier note got buried. If you have 10 to 15 minutes in the coming weeks, I would be grateful for the chance to connect and am flexible on timing. If now is not a good time, I completely understand and appreciate you considering it.\n\nBest,\n${p.name}`;
+  return {kind,subject,body,note:"Template from your follow-up playbook."};
+}
+function profilePrompt(text,url){
+  return `Below is text copied from a person's LinkedIn profile page. Extract facts ONLY from the text. Never invent anything.
+
+Return only a JSON object:
+{"fullName":"","firm":"","firmWebsite":"","title":"","group":"","location":"","schools":[{"name":"","degree":"","years":""}],"priorRoles":[{"title":"","firm":"","years":""}],"hometown":"","activity":[],"deals":[],"ties":[],"insight":""}
+
+- firm, title, group: their CURRENT role. group is the industry or product group if stated (for example TMT, Restructuring, Direct Lending), else "".
+- firmWebsite: the firm's main website domain if you are confident (for example evercore.com), else "".
+- priorRoles: up to 5 earlier roles, most recent first. Include internships.
+- activity: up to 3 one-line summaries of posts or articles THEY wrote, if any appear.
+- deals: deals or transactions they list, as short phrases.
+- ties: real overlaps with the student below (same school, same student organization, same hometown or metro, same sport or activity). Short phrases like "UT Austin McCombs alum" or "Also from Dallas". [] if none.
+- insight: the single most specific detail worth asking about in a networking email, preferring a career switch or lateral move, then a post they wrote, then a listed deal, then an unusual background tied to their work. A short phrase. "" if the profile is thin.
+
+THE STUDENT
+${meText()}
+
+Profile URL: ${url||"not given"}
+PROFILE TEXT
+"""
+${String(text).slice(0,16000)}
+"""`;
+}
+
+/* ---------- actions: email find / write / Gmail ---------- */
+function setBusy(id,v){ if(v) S.busy[id]=v; else delete S.busy[id]; if(S.open===id) renderDrawer(true); if(id==="_answers") updateView(); }
+function enrichOf(ctx,ent,re){
+  const list=ctx?.contacts||ctx?.entities||ctx?.results||[];
+  const row=list.find(x=>String(x.entityId??x.profile_id??x.id)===String(ent))||(list.length===1?list[0]:null);
+  if(!row) return {done:false};
+  const ens=Array.isArray(row.enrichments)?row.enrichments:[];
+  const hits=ens.filter(e=>re.test(String(e.name||e.type||e.dataPointName||e.title||"")));
+  if(!hits.length) return {done:false,row};
+  const pending=hits.some(e=>/progress|pending|queued|running|processing/i.test(String(e.state||e.status||"")));
+  const errored=hits.every(e=>/error|fail/i.test(String(e.state||e.status||"")));
+  return {done:!pending,errored,hits,row};
+}
+async function clayEnrich(id,points){
+  let c=S.contacts[id]; let taskId=c.clayTask, ent=c.clayEntity;
+  if(!taskId||!ent){
+    const f=firmOf(c); const dom=f?.domain||c.domain; if(!dom) throw {code:"tool_error",message:"Add this firm to your list (with its website) so Clay knows where to look."};
+    const r=await call("Clay","search-contacts-by-name",{contactIdentifiers:[{contactName:c.name,companyIdentifier:dom}]});
+    const hit=(r?.contacts||[])[0]; if(!hit) throw {code:"tool_error",message:`Clay couldn't find ${c.name} at ${f?.name||dom}.`};
+    taskId=r.taskId; ent=String(hit.entityId??hit.profile_id);
+    await saveContact(id,{clayTask:taskId,clayEntity:ent,...(!c.linkedin&&hit.url?{linkedin:hit.url}:{})});
+  }
+  await call("Clay","add-contact-data-points",{taskId,dataPoints:points,entityIds:[ent]});
+  for(let i=0;i<16;i++){ await sleep(i<4?3000:5000);
+    const ctx=await call("Clay","get-task-context",{taskId,entityIds:[ent]});
+    const want=points.map(p=>p.type==="Email"?/email/i:/work|history/i);
+    const parts=want.map(re=>enrichOf(ctx,ent,re));
+    if(parts.every(x=>x.done)) return {ctx,parts};
+  }
+  throw {code:"tool_error",message:"Clay is still working on it. Try Verify again in a few minutes."};
+}
+async function findEmail(id,quiet){
+  const c=S.contacts[id]; if(!c) return false;
+  setBusy(id,"email");
+  try{
+    const {parts}=await clayEnrich(id,[{type:"Email"}]);
+    const hit=parts[0]; const blob=JSON.stringify(hit.hits?.map(h=>h.value)??"");
+    const f=firmOf(c); const found=(blob.match(EMAIL_RE_G)||[]).map(e=>e.toLowerCase()).filter(e=>!(c.bounced||[]).includes(e));
+    const best=found.find(e=>f?.mail&&e.endsWith("@"+f.mail))||found[0];
+    if(best){ await saveContact(id,{email:best,emailSrc:"clay",log:addLog(c,`Clay found ${best}`)}); if(!quiet) toast(`Verified: ${best}`,"ok"); return true; }
+    if(!quiet) toast(`Clay had no email for ${c.name}. Keeping the format guess.`,"warn");
+    if(!c.email){ const g=guessEmail(c); if(g) await saveContact(id,{email:g,emailSrc:"pattern"}); }
+    return false;
+  }catch(e){ if(!quiet) toast(errText(e,"Clay"),"crit"); else throw e; return false; }
+  finally{ setBusy(id,null); }
+}
+async function clayHistory(id){
+  const c=S.contacts[id]; setBusy(id,"parse");
+  try{ const {parts}=await clayEnrich(id,[{type:"Summarize Work History"}]); const v=parts[0].hits?.[0]?.value; const text=typeof v==="string"?v:JSON.stringify(v||""); if(text&&text!=='""'){ await saveContact(id,{background:text.slice(0,1500),log:addLog(c,"Pulled work history from Clay")}); toast("Work history added.","ok"); } else toast("Clay returned no work history.","warn"); }
+  catch(e){ toast(errText(e,"Clay"),"crit"); } finally{ setBusy(id,null); }
+}
+async function writeEmail(id,kind,quiet){
+  const c=S.contacts[id]; if(!c) return null;
+  if(kind==="fu1"||kind==="fu2"){ const d=followupTemplate(c,kind); S.drafts[id+":"+kind]=d; if(S.open===id) renderDrawer(true); return d; }
+  if(!P().name){ toast("Add your name in Setup first.","warn"); return null; }
+  setBusy(id,"compose");
+  try{
+    const out=await askJSON(emailPrompt(c,kind));
+    if(!out||typeof out.body!=="string"||!out.body.trim()) throw {code:"invalid_json"};
+    const d={kind,subject:tidy(out.subject)||defaultSubject(c,kind),body:tidy(out.body),note:[out.connection&&out.connection!=="none"?`Connection: ${out.connection}`:"",out.insightUsed?`Hook: ${out.insightUsed}`:"",out.unverified?`Check: ${out.unverified}`:""].filter(Boolean).join(" · ")};
+    S.drafts[id+":"+kind]=d; await saveContact(id,{draft:d}).catch(()=>{});
+    return d;
+  }catch(e){ if(!quiet) toast(sampleErr(e),"crit"); else throw e; return null; }
+  finally{ setBusy(id,null); }
+}
+let resumeCache=null;
+async function resumeAttachment(){
+  const r=P().resume; if(!r?.url) return null;
+  if(resumeCache&&resumeCache.url===r.url) return resumeCache.att;
+  try{ const res=await fetch(r.url); if(!res.ok) throw 0; const buf=await res.arrayBuffer(); const att={content:b64(buf),filename:r.name||"Resume.pdf",mimeType:r.type||"application/pdf"}; resumeCache={url:r.url,att}; return att; }
+  catch{ toast("Couldn't attach your resume. Attach it in Gmail before sending.","warn"); return null; }
+}
+async function gmailDraft(id,quiet){
+  const c=S.contacts[id]; const d=curDraftFor(id); if(!c||!d) return false;
+  if(!c.email){ if(!quiet) toast("Add an email address first.","warn"); return false; }
+  const input={to:[c.email],subject:d.subject,body:d.body};
+  const first=d.kind==="cold"||d.kind==="referral";
+  const att=first?await resumeAttachment():null; if(att) input.attachments=[att];
+  if(!first&&c.lastMsgId) input.replyToMessageId=c.lastMsgId;
+  setBusy(id,"gmail");
+  try{
+    const r=await call("Gmail","create_draft",input);
+    const patch={lastDraft:{kind:d.kind,at:Date.now(),url:r?.viewUrl||"",id:r?.id||""},log:addLog(c,`Saved ${KIND[d.kind].toLowerCase()} to Gmail drafts`)};
+    if(first){ patch.subject=d.subject; if(c.stage==="lead"){ patch.stage="drafted"; patch.draftedAt=Date.now(); } }
+    await saveContact(id,patch);
+    if(!quiet) toast(`Draft saved in Gmail${att?" with your resume":""}.`,"ok",r?.viewUrl);
+    return true;
+  }catch(e){ if(!quiet) toast(errText(e,"Gmail"),"crit"); else throw e; return false; }
+  finally{ setBusy(id,null); }
+}
+function curDraftFor(id){ const el=S.open===id?$("#drawer"):null; const d=curDraft(id); if(!el||!d) return d; const s=el.querySelector('[data-draft="subject"]'), b=el.querySelector('[data-draft="body"]'); return {...d,subject:s?.value??d.subject,body:b?.value??d.body}; }
+async function gmailSend(id){
+  const c=S.contacts[id]; const d=curDraftFor(id); if(!c||!d||!c.email) return;
+  const first=d.kind==="cold"||d.kind==="referral";
+  const input={to:[c.email],subject:d.subject,body:d.body};
+  const att=first?await resumeAttachment():null; if(att) input.attachments=[att];
+  if(!first&&c.threadId) input.replyThreadId=c.threadId;
+  S.sendAsk=null; setBusy(id,"gmail");
+  try{
+    const r=await call("Gmail","send_message",input); const now=Date.now();
+    const patch={lastSentAt:now,lastMsgId:r?.id||c.lastMsgId||"",threadId:r?.threadId||c.threadId||"",log:addLog(c,`Sent ${KIND[d.kind].toLowerCase()}`)};
+    if(first) Object.assign(patch,{stage:"emailed",emailedAt:now,sentCount:1,subject:d.subject});
+    else if(d.kind==="fu1") Object.assign(patch,{stage:"fu1",sentCount:(c.sentCount||1)+1});
+    else if(d.kind==="fu2") Object.assign(patch,{stage:"fu2",sentCount:(c.sentCount||2)+1});
+    else if(d.kind==="thanks") Object.assign(patch,{stage:"thanked",thankedAt:now});
+    else if(d.kind==="checkin") Object.assign(patch,{thankedAt:now});
+    await saveContact(id,patch); delete S.drafts[id+":"+d.kind];
+    const nk=nextAction({...c,...patch})?.kind; if(nk) S.kind[id]=nk;
+    toast(`Sent to ${c.email}.`,"ok");
+  }catch(e){ toast(errText(e,"Gmail")+(e?.code==="server_unavailable"||e?.code==="upstream_error"?" Check Gmail's Sent folder before trying again.":""),"crit"); }
+  finally{ setBusy(id,null); }
+}
+async function prep(id){
+  const c=S.contacts[id]; setBusy(id,"prep");
+  try{
+    const {text}=await ask(`Prepare a college student for a 15-minute networking call with a finance professional. Use only the facts given; do not invent deals or news. If you mention the firm's general business, keep it to well-known facts and say "verify recent deals on the firm's news page".
+
+STUDENT
+${meText()}
+Resume notes: ${(P().resumeText||"").slice(0,4000)||"(not provided)"}
+
+PROFESSIONAL
+${contactText(c)}
+Earlier notes: ${c.notes||"(none)"}
+
+Write plain text with these headings, no markdown symbols:
+WHO THEY ARE (2 lines)
+YOUR 30-SECOND STORY (3 to 4 lines in the student's voice, tied to this person and firm)
+QUESTIONS TO ASK (6, specific to their path and group, most interesting first)
+IF THEY ASK "WHY ${(trackFor(firmOf(c)).short).toUpperCase()}?" (2 to 3 lines)
+CLOSE THE CALL (one line asking who else they'd suggest speaking with)`,{modelTier:"default"});
+    await saveContact(id,{prep:tidy(text).slice(0,6000),log:addLog(c,"Call prep written")});
+  }catch(e){ toast(sampleErr(e),"crit"); } finally{ setBusy(id,null); }
+}
+async function reparse(id){
+  const c=S.contacts[id]; const txt=($("#dr-repaste")?.value||"").trim(); if(txt.length<120) return toast("Paste the full profile text first.","warn");
+  setBusy(id,"parse");
+  try{ const o=await askJSON(profilePrompt(txt,c.linkedin)); await saveContact(id,{...profilePatch(o),profileText:txt.slice(0,8000),log:addLog(c,"Profile updated from pasted text")}); toast("Profile updated.","ok"); }
+  catch(e){ toast(sampleErr(e),"crit"); } finally{ setBusy(id,null); }
+}
+function arr(x,n=6){ return Array.isArray(x)?x.filter(Boolean).slice(0,n):[]; }
+function profilePatch(o){
+  const out={};
+  const s=v=>typeof v==="string"?v.trim().slice(0,300):"";
+  if(s(o.title)) out.title=s(o.title); if(s(o.group)) out.group=s(o.group); if(s(o.location)) out.location=s(o.location); if(s(o.hometown)) out.hometown=s(o.hometown); if(s(o.insight)) out.insight=s(o.insight);
+  const sch=arr(o.schools).map(x=>({name:s(x?.name),degree:s(x?.degree),years:s(x?.years)})).filter(x=>x.name); if(sch.length){ out.schools=sch; out.school=sch[0].name; }
+  const pr=arr(o.priorRoles,5).map(x=>({title:s(x?.title),firm:s(x?.firm),years:s(x?.years)})).filter(x=>x.title||x.firm); if(pr.length) out.priorRoles=pr;
+  const act=arr(o.activity,3).map(s).filter(Boolean); if(act.length) out.activity=act;
+  const deals=arr(o.deals,5).map(s).filter(Boolean); if(deals.length) out.deals=deals;
+  const ties=arr(o.ties,5).map(s).filter(Boolean); if(ties.length) out.ties=ties;
+  return out;
+}
+
+/* ---------- Gmail sync ---------- */
+async function syncGmail(manual){
+  if(!S.mcp){ if(manual) toast("Gmail works when this page is open in Claude.","warn"); return; }
+  if(S.syncing) return;
+  const watch=Object.values(S.contacts).filter(c=>c.email&&["lead","drafted","emailed","fu1","fu2"].includes(c.stage));
+  if(!watch.length){ S.lastSync=Date.now(); lsSet("cd.lastSync",S.lastSync); if(manual) toast("Nobody to check yet. Gmail sync tracks people once they have an email.","ok"); updateView(); return; }
+  S.syncing=true; updateView();
+  const emails=[...new Set(watch.map(c=>c.email.toLowerCase()))];
+  const sent={}, replies={}, bounced=new Set();
+  const ms=m=>Date.parse(m.date)||Number(m.internalDate)||0;
+  try{
+    for(const ch of chunks(emails,12)){
+      const or=ch.join(" OR ");
+      const ps=await call("Gmail","search_threads",{query:`in:sent to:(${or}) newer_than:180d`,pageSize:50,view:"THREAD_VIEW_METADATA_ONLY"});
+      for(const t of ps?.threads||[]) for(const m of t.messages||[]){ if(!(m.labelIds||[]).includes("SENT")) continue; for(const r of [...(m.toRecipients||[]),...(m.ccRecipients||[])]){ const e=emailIn(r); if(ch.includes(e)) (sent[e] ||= []).push({at:ms(m),id:m.id,threadId:m.threadId||t.id}); } }
+      const pr=await call("Gmail","search_threads",{query:`from:(${or}) newer_than:180d`,pageSize:50,view:"THREAD_VIEW_METADATA_ONLY"});
+      for(const t of pr?.threads||[]) for(const m of t.messages||[]){ const e=emailIn(m.sender); if(ch.includes(e)) (replies[e] ||= []).push(ms(m)); }
+    }
+    const pb=await call("Gmail","search_threads",{query:"from:(mailer-daemon OR postmaster) newer_than:60d",pageSize:50,view:"THREAD_VIEW_MINIMAL"});
+    for(const t of pb?.threads||[]) for(const m of t.messages||[]) for(const e of String((m.snippet||"")+" "+(m.subject||"")).match(EMAIL_RE_G)||[]){ const x=e.toLowerCase(); if(emails.includes(x)) bounced.add(x); }
+  }catch(e){ S.syncing=false; updateView(); if(manual||e?.code!=="not_in_manifest") toast(errText(e,"Gmail"),"crit"); return; }
+  let nS=0,nR=0,nB=0; const rank={lead:0,drafted:0,emailed:1,fu1:2,fu2:3};
+  for(const c of watch){
+    const e=c.email.toLowerCase(); const patch={}; const rp=(replies[e]||[]).filter(Boolean).sort((a,b)=>a-b);
+    if(bounced.has(e)&&!rp.length){
+      const bl=[...new Set([...(c.bounced||[]),e])]; const next=(c.altEmails||[]).find(a=>!bl.includes(a))||guessEmail(c,bl);
+      Object.assign(patch,{bounced:bl,email:next||"",emailSrc:next?"pattern":"",stage:"lead",log:addLog(c,`Bounced: ${e}${next?`. Trying ${next}`:""}`)}); nB++;
+    } else {
+      const s=(sent[e]||[]).filter(x=>x.at).sort((a,b)=>a.at-b.at);
+      if(s.length){ const f0=s[0], l=s[s.length-1];
+        if(!c.emailedAt||f0.at<c.emailedAt) patch.emailedAt=f0.at;
+        if(!c.lastSentAt||l.at>c.lastSentAt){ patch.lastSentAt=l.at; patch.lastMsgId=l.id; patch.threadId=l.threadId; }
+        if(c.sentCount!==s.length) patch.sentCount=s.length;
+        if(!c.subject&&c.lastDraft) patch.subject=c.draft?.subject||"";
+        const want=s.length>=3?"fu2":s.length===2?"fu1":"emailed";
+        if(rank[want]>rank[c.stage]){ patch.stage=want; if(rank[c.stage]===0){ nS++; patch.log=addLog(c,"Sent from Gmail"); } }
+      }
+      if(rp.length&&(!c.emailedAt||rp[rp.length-1]>=(patch.emailedAt||c.emailedAt)-DAY)){ Object.assign(patch,{stage:"replied",repliedAt:rp[rp.length-1],emailSrc:"replied",log:addLog(c,"They replied")}); nR++; }
+    }
+    if(!patch.subject) delete patch.subject;
+    if(Object.keys(patch).length) await saveContact(c.id,patch).catch(()=>{});
+  }
+  S.lastSync=Date.now(); lsSet("cd.lastSync",S.lastSync); S.syncing=false; updateView();
+  if(manual||nS||nR||nB) toast(`Gmail checked. ${nS} newly sent, ${nR} repl${nR===1?"y":"ies"}, ${nB} bounce${nB===1?"":"s"}.`,nR?"ok":"");
+}
+
+/* ---------- bulk flows ---------- */
+async function bulkDraft(ids){
+  if(!P().name) return toast("Add your name in Setup first.","warn");
+  const list=ids.map(id=>S.contacts[id]).filter(c=>c&&c.email&&c.stage==="lead");
+  if(!list.length) return toast("None of these are leads with an email.","warn");
+  const b=bulkStart("Writing Gmail drafts",list.length); let ok=0, fail="";
+  for(const c of list){ if(b.stop) break;
+    try{ const kind=c.referrer?"referral":"cold"; S.kind[c.id]=kind; const d=await writeEmail(c.id,kind,true); if(d&&await gmailDraft(c.id,true)) ok++; }
+    catch(e){ fail=e?.code&&String(e.code).match(/not_granted|sampling|rate_limited|no_sample/)?sampleErr(e):(e?.server||/needs_reauth|server_not|not_in_manifest/.test(e?.code||"")?errText(e,"Gmail"):sampleErr(e)); if(/not_granted|sampling|rate_limited|needs_reauth|server_not|not_in_manifest|no_sample|no_mcp/.test(e?.code||"")) break; }
+    bulkStep(c.name);
+  }
+  bulkEnd(); toast(`${ok} draft${ok===1?"":"s"} saved in Gmail.${ok?" Open Gmail to review and send.":""}`,ok?"ok":"warn"); if(fail) toast(fail,"crit");
+}
+async function bulkGuess(ids){
+  const list=ids.map(id=>S.contacts[id]).filter(c=>c&&!c.email); let n=0;
+  for(const c of list){ const g=guessEmail(c,c.bounced||[]); if(g){ try{ await saveContact(c.id,{email:g,emailSrc:"pattern"}); n++; }catch{} } }
+  toast(`Guessed ${n} email${n===1?"":"s"}${list.length-n?`. ${list.length-n} need a firm format or a full last name.`:"."}`,n?"ok":"warn");
+}
+async function bulkFind(ids){
+  const list=ids.map(id=>S.contacts[id]).filter(c=>c&&c.emailSrc!=="clay"&&c.emailSrc!=="replied");
+  if(!list.length) return toast("Everyone selected already has a verified email.","ok");
+  const b=bulkStart("Verifying emails in Clay",list.length); let ok=0;
+  for(const c of list){ if(b.stop) break; try{ if(await findEmail(c.id,true)) ok++; }catch(e){ toast(errText(e,"Clay"),"crit"); if(!/tool_error/.test(e?.code||"")) break; } bulkStep(c.name); }
+  bulkEnd(`Clay verified ${ok} of ${list.length}.`);
+}
+
+/* ---------- modals ---------- */
+function openModal(html){ $("#modalCard").innerHTML=html; $("#modal").hidden=false; setTimeout(()=>$("#modalCard").querySelector("textarea,input")?.focus(),30); }
+function closeModal(){ $("#modal").hidden=true; $("#modalCard").innerHTML=""; S.modal=null; }
+function pasteModal(){
+  S.modal={kind:"paste"};
+  openModal(`<div class="hd"><div><div class="eyebrow">One profile</div><h2>Paste a LinkedIn profile</h2></div><button class="icon-btn" data-act="closeModal" aria-label="Close">×</button></div>
+  <p class="muted" style="margin:0;font-size:13px">On their profile page, press Ctrl+A then Ctrl+C, and paste below. LinkedIn pages can't be read from a link alone.</p>
+  <textarea class="in" id="pm-text" rows="9" placeholder="Paste the whole profile page here"></textarea>
+  <div class="form-grid"><label class="lbl">Profile URL (optional)<input class="in" id="pm-url" placeholder="https://www.linkedin.com/in/…"></label><label class="lbl">Referred by (optional)<input class="in" id="pm-ref" placeholder="Full name"></label></div>
+  <div class="btn-row"><label class="chk"><input type="checkbox" id="pm-clay" checked> Verify the email with Clay</label><label class="chk"><input type="checkbox" id="pm-write" checked> Write the email</label><label class="chk"><input type="checkbox" id="pm-draft" checked> Save it to Gmail drafts</label></div>
+  <ul class="progress-list" id="pm-steps" hidden></ul>
+  <div class="btn-row"><button class="btn primary" data-act="pasteGo" id="pm-go">Add contact</button><button class="btn ghost" data-act="closeModal">Cancel</button></div>`);
+}
+function stepUI(list){ const ul=$("#pm-steps"); if(!ul) return; ul.hidden=false; ul.innerHTML=list.map(s=>`<li class="${s.st||""}">${esc(s.t)}</li>`).join(""); }
+async function pasteGo(){
+  const text=($("#pm-text")?.value||"").trim(), url=($("#pm-url")?.value||"").trim(), ref=($("#pm-ref")?.value||"").trim();
+  const optClay=$("#pm-clay")?.checked, optWrite=$("#pm-write")?.checked, optDraft=$("#pm-draft")?.checked;
+  if(text.length<150) return toast("Paste the full profile text. It's usually a few thousand characters.","warn");
+  if(!S.db) return toast(NO_DB,"warn");
+  $("#pm-go").disabled=true;
+  const steps=[{t:"Reading the profile"},{t:"Matching the firm and email format"},{t:optClay?"Verifying the email in Clay":"Skipping Clay lookup",st:optClay?"":"skip"},{t:optWrite?"Writing the email":"Skipping the email",st:optWrite?"":"skip"},{t:optDraft&&optWrite?"Saving to Gmail drafts":"Skipping Gmail",st:optDraft&&optWrite?"":"skip"}];
+  const run=(i,st)=>{steps[i].st=st;stepUI(steps);}; stepUI(steps);
+  let id;
+  try{
+    run(0,"run"); const o=await askJSON(profilePrompt(text,url)); run(0,"done");
+    run(1,"run");
+    const name=String(o.fullName||"").trim(); if(!name) throw {code:"invalid_json"};
+    let firm=matchFirm(o.firm);
+    if(!firm&&o.firm){ const dom=String(o.firmWebsite||"").toLowerCase().replace(/^https?:\/\//,"").replace(/^www\./,"").replace(/\/.*$/,""); if(/^[a-z0-9.-]+\.[a-z]{2,}$/.test(dom)){ const fid="c-"+slug(o.firm); await saveTarget(fid,{custom:true,name:String(o.firm).slice(0,80),type:/credit|lending|capital partners|debt/i.test(o.firm)?"PC":"MM",domain:dom,mail:dom,pat:"first.last",on:false}); firm=firmById(fid); } }
+    const {first,last}=splitName(name);
+    id=idFor(url,name,o.firm);
+    const existing=S.contacts[id];
+    const c={name,first,last,firm:firm?.name||String(o.firm||""),firmId:firm?.id||"",linkedin:safeUrl(url)||existing?.linkedin||"",...profilePatch(o),profileText:text.slice(0,8000),source:"Pasted profile",...(ref?{referrer:ref}:{})};
+    if(!existing){ c.stage="lead"; c.log=addLog({},"Added from pasted profile"); }
+    if(!existing?.email){ const g=guessEmail(c); if(g){ c.email=g; c.emailSrc="pattern"; } }
+    await saveContact(id,c); run(1,"done");
+    if(optClay){ run(2,"run"); try{ const ok=await findEmail(id,true); run(2,ok?"done":"fail"); }catch(e){ run(2,"fail"); toast(errText(e,"Clay"),"warn"); } }
+    let d=null;
+    if(optWrite){ run(3,"run"); const kind=ref?"referral":"cold"; S.kind[id]=kind; d=await writeEmail(id,kind,true); run(3,d?"done":"fail"); }
+    if(optWrite&&optDraft){ if(d&&S.contacts[id]?.email){ run(4,"run"); try{ await gmailDraft(id,true); run(4,"done"); }catch(e){ run(4,"fail"); toast(errText(e,"Gmail"),"warn"); } } else run(4,"skip"); }
+    closeModal(); openContact(id);
+    toast(`${name} added${S.contacts[id]?.stage==="drafted"?" and drafted in Gmail":""}.`,"ok");
+  }catch(e){ const i=steps.findIndex(s=>s.st==="run"); if(i>=0) run(i,"fail"); toast(e?.code&&e.code in {no_mcp:1}?errText(e,"Connector"):sampleErr(e),"crit"); if($("#pm-go")) $("#pm-go").disabled=false; if(id&&S.contacts[id]){ closeModal(); openContact(id); } }
+}
+function bulkModal(tab="text"){
+  S.modal={kind:"bulk",tab,rows:[]};
+  const fopts=`<option value="">Firm shown in the text</option>${FIRMS.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join("")}`;
+  openModal(`<div class="hd"><div><div class="eyebrow">Many people at once</div><h2>Bulk add</h2></div><button class="icon-btn" data-act="closeModal" aria-label="Close">×</button></div>
+  <div class="seg"><button class="seg-b ${tab==="text"?"on":""}" data-act="bulkTab" data-k="text">Paste a page or list</button><button class="seg-b ${tab==="csv"?"on":""}" data-act="bulkTab" data-k="csv">Import CSV</button></div>
+  ${tab==="text"?`<p class="muted" style="margin:0;font-size:13px">Paste anything with names in it: a LinkedIn alumni or search results page, a firm's team page, a club placement list, or plain lines like "Jane Doe, Evercore, Analyst". Claude pulls out every person.</p>
+    <textarea class="in" id="bm-text" rows="10" placeholder="Paste here"></textarea>
+    <div class="form-grid"><label class="lbl">Everyone works at<select class="in" id="bm-firm" style="width:100%">${fopts}</select></label><label class="chk" style="align-self:end"><input type="checkbox" id="bm-school"> They all went to my school</label></div>
+    <div class="btn-row"><button class="btn primary" data-act="bulkExtract" id="bm-go">Find people in this text</button></div>`
+  :`<p class="muted" style="margin:0;font-size:13px">Columns are matched by header: name (or first and last), firm or company, title, email, linkedin, location, school. A CSV from "Export leads for finder" matches back by id and fills in emails.</p>
+    <input type="file" id="bm-file" accept=".csv,text/csv,text/plain" data-chg="csvFile"><textarea class="in" id="bm-csv" rows="6" placeholder="Or paste CSV text here"></textarea>
+    <div class="btn-row"><button class="btn primary" data-act="csvParse">Read CSV</button></div>`}
+  <div id="bm-prev"></div>`);
+}
+async function bulkExtract(){
+  const text=($("#bm-text")?.value||"").trim(); if(text.length<5) return toast("Paste some text first.","warn");
+  const fid=$("#bm-firm")?.value||""; const sameSchool=$("#bm-school")?.checked;
+  let rows=null;
+  const lines=text.split(/\n/).map(s=>s.trim()).filter(Boolean);
+  const simple=lines.length<=400&&lines.every(l=>l.split(/\t|,|\s[-–|]\s/).length<=5&&l.length<160);
+  if(simple&&(!S.sample||lines.length>=3&&lines.every(l=>/[,\t|]|\s-\s/.test(l)))) rows=lines.map(l=>{const p=l.split(/\t|,|\s[-–|]\s/).map(s=>s.trim());return {name:p[0],firm:p[1]||"",title:p[2]||"",location:p[3]||""};});
+  else{
+    if(!S.sample) return toast("Reading free-form text needs Claude. Use one person per line: Name, Firm, Title.","warn");
+    $("#bm-go").disabled=true; $("#bm-go").textContent="Reading…";
+    try{ const out=await askJSON(`Extract every individual person who appears in the text below (for example from a LinkedIn search results page, an alumni page, a firm team page, or a list). Skip the page's viewer, navigation labels, ads, and companies.
+
+Return only a JSON array, at most 200 items, each: {"name":"","title":"","firm":"","location":"","linkedin":"","school":""}
+- title and firm come from their headline or current role ("Analyst at Evercore" gives title "Analyst", firm "Evercore").
+- linkedin only if a full linkedin.com/in/ URL appears for that person.
+- Leave a field "" when the text doesn't say. Never invent.
+
+TEXT
+"""
+${text.slice(0,60000)}
+"""`); rows=Array.isArray(out)?out:(Array.isArray(out?.people)?out.people:[]); }
+    catch(e){ toast(sampleErr(e),"crit"); }
+    if($("#bm-go")){ $("#bm-go").disabled=false; $("#bm-go").textContent="Find people in this text"; }
+    if(!rows) return;
+  }
+  const fixed=fid?firmById(fid):null; const p=P();
+  S.modal.rows=rows.filter(r=>r&&String(r.name||"").trim().split(/\s+/).length>=2).map(r=>({name:String(r.name).trim(),title:String(r.title||"").trim(),firm:fixed?fixed.name:String(r.firm||"").trim(),firmId:fixed?.id||matchFirm(r.firm)?.id||"",location:String(r.location||"").trim(),linkedin:safeUrl(r.linkedin),school:sameSchool?(p.schoolNames[0]||p.school):String(r.school||"").trim(),email:"",source:"Bulk paste"}));
+  renderBulkPreview();
+}
+function csvParse(){
+  const text=$("#bm-csv")?.value||""; const rows=parseCSV(text); if(rows.length<2) return toast("That CSV needs a header row and at least one person.","warn");
+  const H=rows[0].map(h=>String(h).toLowerCase().trim()); const col=(...ks)=>H.findIndex(h=>ks.some(k=>h===k||h.replace(/[\s_-]+/g,"")===k.replace(/[\s_-]+/g,"")));
+  const ix={id:col("deskid","desk id","id"),source:col("source"),conf:col("confidence"),alt:col("alt guess","alt_guess","alt guesses"),note:col("note","notes"),name:col("name","full name","full_name","fullname"),first:col("first","first name","first_name","firstname"),last:col("last","last name","last_name","lastname"),firm:col("firm","company","company name","organization","employer"),title:col("title","job title","position","headline"),email:col("email","email address","work email","professional_email","found_email","best_email"),linkedin:col("linkedin","linkedin url","linkedin_url","profile url","url"),location:col("location","city"),school:col("school","education","university"),domain:col("company_domain","domain","website")};
+  const g=(r,k)=>ix[k]>=0?String(r[ix[k]]||"").trim():"";
+  S.modal.rows=rows.slice(1,1501).map(r=>{ const name=g(r,"name")||[g(r,"first"),g(r,"last")].filter(Boolean).join(" "); const firm=g(r,"firm"); const f=(g(r,"domain")&&FIRMS.find(x=>x.domain===g(r,"domain").toLowerCase()))||matchFirm(firm); const em=emailIn(g(r,"email")); const src=g(r,"source"), conf=g(r,"conf").toLowerCase(); const guessed=/pattern|guess/i.test(src)||["high","medium","low"].includes(conf); const note=g(r,"note");
+    return {cid:g(r,"id"),name,firm:firm||f?.name||"",firmId:f?.id||"",title:g(r,"title"),email:em,emailSrc:em?(guessed?"pattern":"import"):"",alts:(g(r,"alt").match(EMAIL_RE_G)||[]).map(x=>x.toLowerCase()).slice(0,4),linkedin:safeUrl(g(r,"linkedin")),location:g(r,"location"),school:g(r,"school")||(/web search/i.test(note)?(P().schoolNames[0]||P().school):""),source:/web search/i.test(note)?"email_finder.py web search":"CSV import"}; }).filter(x=>x.name||x.cid);
+  renderBulkPreview();
+}
+function renderBulkPreview(){
+  const rows=S.modal?.rows||[]; const el=$("#bm-prev"); if(!el) return;
+  if(!rows.length){ el.innerHTML=`<div class="banner warn" style="margin:0">No people found. Check the text or the CSV headers.</div>`; return; }
+  const withId=rows.map(r=>({...r,id:(r.cid&&S.contacts[r.cid])?r.cid:idFor(r.linkedin,r.name,r.firm)}));
+  S.modal.rows=withId;
+  const upd=withId.filter(r=>S.contacts[r.id]).length;
+  el.innerHTML=`<div class="section-title" style="margin:0"><strong>${withId.length} people · ${withId.length-upd} new${upd?` · ${upd} already in pipeline (emails update)`:""}</strong><button class="btn primary" data-act="bulkCommit">Add ${withId.length}</button></div>
+  <div class="tbl-wrap" style="max-height:300px;overflow:auto"><table class="tbl"><thead><tr><th>Name</th><th>Firm</th><th>Title</th><th>Email</th></tr></thead><tbody>${withId.slice(0,200).map(r=>`<tr><td class="nm">${esc(r.name)}${S.contacts[r.id]?` <span class="tag">in pipeline</span>`:""}</td><td>${esc(r.firm)}${r.firmId?"":` <span class="faint" style="font-size:11px">not on list</span>`}</td><td class="sub">${esc(r.title)}</td><td class="sub">${esc(r.email||"guess")}</td></tr>`).join("")}</tbody></table></div>`;
+}
+async function bulkCommit(){
+  const rows=S.modal?.rows||[]; if(!rows.length||!S.db) return; closeModal();
+  const p=P(); const b=bulkStart("Adding people",rows.length); let n=0,u=0;
+  for(const r of rows){ if(b.stop) break;
+    const ex=S.contacts[r.id];
+    try{
+      if(ex){ const patch={}; const locked=["clay","replied","manual"].includes(ex.emailSrc)||(ex.emailSrc==="import"&&r.emailSrc==="pattern");
+        if(r.email&&r.email!==ex.email&&!locked&&!(ex.bounced||[]).includes(r.email)){ patch.email=r.email; patch.emailSrc=r.emailSrc||"import"; }
+        if((r.alts||[]).length) patch.altEmails=r.alts; if(r.linkedin&&!ex.linkedin) patch.linkedin=r.linkedin; if(r.title&&!ex.title) patch.title=r.title;
+        if(Object.keys(patch).length){ patch.log=addLog(ex,"Updated from import"); await saveContact(r.id,patch); u++; } }
+      else{ const {first,last}=splitName(r.name); const ut=r.school&&/texas at austin|mccombs/i.test(r.school); const c={name:r.name,first,last,firm:r.firm,firmId:r.firmId,title:r.title,location:r.location,linkedin:r.linkedin,school:r.school,ties:ut?[`${p.school} alum`]:[],stage:"lead",source:r.source,log:addLog({},`Added by ${r.source.toLowerCase()}`)};
+        if((r.alts||[]).length) c.altEmails=r.alts;
+        if(r.email){ c.email=r.email; c.emailSrc=r.emailSrc||"import"; } else { const g=guessEmail(c); if(g){ c.email=g; c.emailSrc="pattern"; } }
+        await saveContact(r.id,c); n++; }
+    }catch{}
+    bulkStep(r.name);
+  }
+  bulkEnd(`${n} added${u?`, ${u} updated`:""}.`);
+}
+function appModal(id,preset={}){
+  const a=id?S.apps[id]:{status:"Watching",...preset}; S.modal={kind:"app",id:id||null};
+  openModal(`<div class="hd"><div><div class="eyebrow">Application</div><h2>${id?"Edit":"Track"} ${esc(a.firm||"a program")}</h2></div><button class="icon-btn" data-act="closeModal" aria-label="Close">×</button></div>
+  <div class="form-grid">
+    <label class="lbl">Firm<input class="in" id="am-firm" list="am-firms" value="${esc(a.firm||"")}"><datalist id="am-firms">${FIRMS.map(f=>`<option value="${esc(f.name)}">`).join("")}</datalist></label>
+    <label class="lbl">Program<input class="in" id="am-prog" value="${esc(a.program||"")}" placeholder="2028 IB Summer Analyst"></label>
+    <label class="lbl">Location<input class="in" id="am-loc" value="${esc(a.location||"")}"></label>
+    <label class="lbl">Posting link<input class="in" id="am-url" value="${esc(a.url||"")}" placeholder="https://"></label>
+    <label class="lbl">Opens<input class="in" type="date" id="am-open" value="${esc(a.opens||"")}"></label>
+    <label class="lbl">Deadline<input class="in" type="date" id="am-dl" value="${esc(a.deadline||"")}"></label>
+    <label class="lbl">Status<select class="in" id="am-status" style="width:100%">${APP_STATUS.map(s=>`<option ${s===a.status?"selected":""}>${s}</option>`).join("")}</select></label>
+    <label class="lbl full">Notes<textarea class="in" id="am-notes" rows="2">${esc(a.notes||"")}</textarea></label>
+    <label class="lbl full">"Why this firm?" answer<textarea class="in" id="am-why" rows="5" placeholder="Write it from your networking notes with one click">${esc(a.why||"")}</textarea></label>
+  </div>
+  <div class="btn-row"><button class="btn primary" data-act="appSave">Save</button><button class="btn" data-act="appWhy" id="am-whyb">Write "Why this firm?" from my calls</button>${id?`<button class="btn ghost danger" data-act="appDel" data-id="${esc(id)}">Delete</button>`:""}<button class="btn ghost" data-act="closeModal">Cancel</button></div>`);
+}
+function firmModal(id,name){
+  const f=id?firmById(id):{name:name||"",type:"MM",domain:"",mail:"",pat:"first.last"}; S.modal={kind:"firm",id:id||null,custom:!id||f.custom};
+  openModal(`<div class="hd"><div><div class="eyebrow">Firm</div><h2>${id?esc(f.name):"Add a firm"}</h2></div><button class="icon-btn" data-act="closeModal" aria-label="Close">×</button></div>
+  <div class="form-grid">
+    <label class="lbl">Name<input class="in" id="fm-name" value="${esc(f.name)}" ${id&&!f.custom?"disabled":""}></label>
+    <label class="lbl">Type<select class="in" id="fm-type" style="width:100%">${Object.entries(TYPES).map(([k,v])=>`<option value="${k}" ${k===f.type?"selected":""}>${v}</option>`).join("")}</select></label>
+    <label class="lbl">Website domain (used for Clay search)<input class="in" id="fm-domain" value="${esc(f.domain)}" placeholder="evercore.com"></label>
+    <label class="lbl">Email domain<input class="in" id="fm-mail" value="${esc(f.mail)}" placeholder="evercore.com"></label>
+    <label class="lbl">Email format<select class="in" id="fm-pat" style="width:100%">${PAT_ORDER.map(p=>`<option value="${p}" ${p===f.pat?"selected":""}>${p}  (e.g. ${PATS[p]("jane","doe")})</option>`).join("")}</select></label>
+    <label class="lbl full">Careers page<input class="in" id="fm-careers" value="${esc(f.careers||CAREERS[f.id]?.[0]||"")}" placeholder="https://"></label>
+  </div>
+  <div class="btn-row"><button class="btn primary" data-act="firmSave">Save</button>${id&&f.custom?`<button class="btn ghost danger" data-act="firmDel" data-id="${esc(id)}">Remove</button>`:""}<button class="btn ghost" data-act="closeModal">Cancel</button></div>`);
+}
+
+/* ---------- exports ---------- */
+async function saveFile(filename,text){
+  if(S.downloads){ try{ await S.downloads.save({filename,data:text}); return; }catch(e){ if(e?.code==="declined") return; } }
+  openModal(`<div class="hd"><h2>${esc(filename)}</h2><button class="icon-btn" data-act="closeModal" aria-label="Close">×</button></div><p class="muted" style="margin:0">Copy this text and save it as a .csv file.</p><textarea class="in" rows="14" readonly id="exportText">${esc(text)}</textarea><div class="btn-row"><button class="btn primary" data-act="copyExport">Copy</button></div>`);
+}
+function exportCSV(){
+  const cols=["name","firm","title","stage","email","email_source","linkedin","location","emailed_at","replied_at","call_at","ties","notes"];
+  const rows=Object.values(S.contacts).map(c=>[c.name,firmOf(c)?.name||c.firm,c.title,stageOf(c.stage).label,c.email,c.emailSrc,c.linkedin,c.location,c.emailedAt?new Date(c.emailedAt).toISOString().slice(0,10):"",c.repliedAt?new Date(c.repliedAt).toISOString().slice(0,10):"",c.callAt?new Date(c.callAt).toISOString():"",(c.ties||[]).join("; "),c.notes]);
+  saveFile(`coverage-desk-${new Date().toISOString().slice(0,10)}.csv`,[cols,...rows].map(r=>r.map(csvCell).join(",")).join("\n"));
+}
+/* Same columns as the sheet email_finder.py reads and writes, plus DeskId so rows match back on import.
+   Confirmed emails go out filled (the script learns firm patterns from them); guesses go out blank so the script fills them. */
+function exportFinder(){
+  const list=Object.values(S.contacts); if(!list.length) return toast("Your pipeline is empty.","ok");
+  const cols=["Category","Firm","Name","Title","Location","Email","Source","LinkedIn","Note","Confidence","Alt Guess","DeskId"];
+  const srcName={clay:"Clay",replied:"Confirmed by reply",import:"Import",manual:"Typed in"};
+  const rows=list.map(c=>{const f=firmOf(c); const ok=c.email&&srcName[c.emailSrc]; const cat=f?TYPES[f.type]:"";
+    return [cat==="Texas & regional"?"Regional (TX)":cat,f?.name||c.firm,c.name,c.title,c.location,ok?c.email:"",ok?srcName[c.emailSrc]:"",c.linkedin,(c.bounced||[]).length?`Bounced: ${c.bounced.join("; ")}`:"",ok?"Confirmed":"","",c.id];});
+  saveFile("UT_Alumni_Bankers.csv",[cols,...rows].map(r=>r.map(csvCell).join(",")).join("\n"));
+  toast("Run: python email_finder.py UT_Alumni_Bankers.csv  then import the same file back here.","ok");
+}
+
+/* ---------- events ---------- */
+const ACT = {
+  tab:el=>setTab(el.dataset.tab),
+  open:(el,e)=>{ if(e.target.closest('[data-stop]')) return; e.preventDefault(); openContact(el.dataset.id); },
+  closeDrawer:()=>closeDrawer(),
+  closeModal:()=>closeModal(),
+  pasteOpen:()=>pasteModal(),
+  pasteGo:()=>pasteGo(),
+  bulkOpen:el=>bulkModal(el.dataset.tabx||"text"),
+  bulkTab:el=>bulkModal(el.dataset.k),
+  bulkExtract:()=>bulkExtract(),
+  csvParse:()=>csvParse(),
+  bulkCommit:()=>bulkCommit(),
+  bulkStop:()=>{ if(S.bulk){ S.bulk.stop=true; renderBulk(); } },
+  sync:()=>syncGmail(true),
+  doNext:el=>{ const c=S.contacts[el.dataset.id]; const a=c&&nextAction(c); if(!a) return;
+    if(a.act==="compose"){ openContact(c.id,a.kind); if(!curDraft(c.id)) writeEmail(c.id,a.kind); }
+    else if(a.act==="findEmail"){ openContact(c.id); findEmail(c.id); }
+    else if(a.act==="prep"){ openContact(c.id); if(!c.prep) prep(c.id); }
+    else if(a.act==="close"){ saveContact(c.id,{stage:"closed",log:addLog(c,"Closed after two follow-ups")}); }
+    else openContact(c.id); },
+  bulkDraft:el=>{ const ids=Object.values(S.contacts).filter(c=>c.stage==="lead"&&c.email).sort((a,b)=>(b.ties||[]).length-(a.ties||[]).length||(a.createdAt||0)-(b.createdAt||0)).slice(0,Number(el.dataset.n)||10).map(c=>c.id); bulkDraft(ids); },
+  bulkGuess:()=>bulkGuess(Object.values(S.contacts).filter(c=>c.stage==="lead"&&!c.email).map(c=>c.id)),
+  bulkFind:()=>bulkFind(Object.values(S.contacts).filter(c=>c.stage==="lead"&&!c.email).map(c=>c.id)),
+  bulkDraftSel:()=>bulkDraft([...S.sel]),
+  bulkGuessSel:()=>bulkGuess([...S.sel]),
+  bulkFindSel:()=>bulkFind([...S.sel]),
+  selNone:()=>{ S.sel.clear(); updateView(); },
+  fPick:el=>{ const k=el.dataset.k; const s=new Set(); if(k==="targets") FIRMS.filter(f=>f.on).forEach(f=>s.add(f.id)); else if(TYPES[k]) FIRMS.filter(f=>f.type===k&&(f.on||S.find.showAll)).forEach(f=>s.add(f.id)); S.find.firms=s; updateFind(); },
+  fToggle:el=>{ const s=findFirms(); s.has(el.dataset.id)?s.delete(el.dataset.id):s.add(el.dataset.id); updateFind(); },
+  runFind:()=>runFind(),
+  fMore:()=>findMore(),
+  fAdd:()=>addFound(),
+  fSelAll:()=>{ const fresh=S.find.results.filter(x=>!S.contacts[x.cid]); const all=fresh.every(x=>S.find.picked.has(x.cid)); fresh.forEach(x=>all?S.find.picked.delete(x.cid):S.find.picked.add(x.cid)); updateFind(); },
+  findAt:el=>{ S.find.firms=new Set([el.dataset.id]); setTab("find"); },
+  exportFinder:()=>exportFinder(),
+  exportCSV:()=>exportCSV(),
+  pfGroup:el=>{ S.pf.group=el.dataset.g; updatePipeline(); },
+  ffType:el=>{ S.ff.type=el.dataset.k; updateFirms(); },
+  ffShow:el=>{ S.ff.show=el.dataset.k; updateFirms(); },
+  firmToggle:el=>{ const f=firmById(el.dataset.id); if(f) saveTarget(f.id,{on:!f.on}); },
+  firmAdd:el=>firmModal(null,el.dataset.name||""),
+  firmEdit:el=>firmModal(el.dataset.id),
+  firmSave:async()=>{ const m=S.modal; const v=id=>($("#"+id)?.value||"").trim(); const dom=v("fm-domain").toLowerCase().replace(/^https?:\/\//,"").replace(/^www\./,"").replace(/\/.*$/,""); const mail=(v("fm-mail")||dom).toLowerCase().replace(/^@/,"");
+    const careers=safeUrl(v("fm-careers"));
+    if(m.id&&!m.custom){ const over={type:v("fm-type"),domain:dom,mail,pat:v("fm-pat")}; if(careers&&careers!==CAREERS[m.id]?.[0]) over.careers=careers; await saveTarget(m.id,{over}); }
+    else { const name=v("fm-name"); if(!name) return toast("Give the firm a name.","warn"); const id=m.id||("c-"+slug(name)); await saveTarget(id,{custom:true,name,type:v("fm-type"),domain:dom,mail,pat:v("fm-pat"),careers,on:true}); }
+    closeModal(); toast("Firm saved.","ok"); },
+  firmDel:async el=>{ if(!S.db) return; delete S.targets[el.dataset.id]; rebuildFirms(); dataChanged(); await S.db.collection("targets").doc(el.dataset.id).delete().catch(e=>toast(dbErr(e),"crit")); closeModal(); },
+  jPreset:el=>{ const s=S.jobs.presets; s.has(el.dataset.id)?s.delete(el.dataset.id):s.add(el.dataset.id); updateJobs(); },
+  jLoc:el=>{ const s=S.jobs.locs; s.has(el.dataset.id)?s.delete(el.dataset.id):s.add(el.dataset.id); updateJobs(); },
+  runJobs:()=>runJobs(),
+  jobTrack:el=>{ const k=el.dataset.key; const j=[...allFirmJobs(),...S.jobs.results].find(x=>x.key===k); if(!j) return; const f=firmById(j.firmId); appModal(null,{firm:f?.name||j.company,firmId:j.firmId||"",program:j.title,location:j.location,url:safeUrl(j.url),status:"Open"}); },
+  pullJobs:()=>pullJobs(),
+  discRun:()=>{ for(const id of ["dKind","dText","dPlace","dSize"]){ const el=$("#"+id); if(el) CHG[id](el); } discRun(false); },
+  discMore:()=>discRun(true),
+  rsRun:()=>rsRun(),
+  rsRetry:el=>rsRetry(Number(el.dataset.i)),
+  rsDec:el=>{ const l=S.rs.lines[Number(el.dataset.i)]; if(!l) return; const k=el.dataset.k; l.decision=(l.decision===k&&k!=="edit")?"pending":k; if(k==="edit"&&!l.edited) l.edited=l.rewrite; rsPersist(); updateResume(); },
+  rsAcceptAll:()=>{ for(const l of S.rs.lines) if(l.rewrite&&(!l.decision||l.decision==="pending")) l.decision="accept"; rsPersist(); updateResume(); },
+  rsCopy:()=>copy(rsFinal()),
+  rsDownload:()=>saveFile("resume-updated.txt",rsFinal()),
+  rsAdopt:async()=>{ const t=rsFinal(); if(!t.trim()) return; await saveProfile({resumeText:t.slice(0,20000)}); const ta=$("#rs-text"); if(ta) ta.value=t; toast("Saved as your resume text. Answers and call prep now use it.","ok"); },
+  rsSaveText:async()=>{ const t=rsSource(); await saveProfile({resumeText:t.slice(0,20000)}); toast("Resume text saved.","ok"); },
+  discAdd:()=>discAdd(),
+  jView:el=>{ S.jobs.view=el.dataset.k; updateJobs(); },
+  jobsFor:(el,e)=>{ e?.preventDefault?.(); S.jobs.firm=el.dataset.id; S.jobs.view="all"; if(S.tab!=="jobs") setTab("jobs"); else updateJobs(); },
+  appNew:el=>{ const f=el.dataset.firm?firmById(el.dataset.firm):null; appModal(null,f?{firm:f.name,firmId:f.id}:{}); },
+  appEdit:el=>appModal(el.dataset.id),
+  appSave:async()=>{ const v=id=>($("#"+id)?.value||"").trim(); const firm=v("am-firm"); if(!firm) return toast("Add the firm name.","warn"); const f=matchFirm(firm); const id=S.modal.id||("a-"+slug(firm+"-"+(v("am-prog")||"program"))+"-"+Date.now().toString(36));
+    await saveApp(id,{firm,firmId:f?.id||"",program:v("am-prog"),location:v("am-loc"),url:safeUrl(v("am-url")),opens:v("am-open"),deadline:v("am-dl"),status:v("am-status")||"Watching",notes:v("am-notes"),why:$("#am-why")?.value||""}); closeModal(); toast("Application saved.","ok"); },
+  appDel:async el=>{ if(!S.db) return; delete S.apps[el.dataset.id]; dataChanged(); await S.db.collection("apps").doc(el.dataset.id).delete().catch(e=>toast(dbErr(e),"crit")); closeModal(); },
+  appWhy:async()=>{ const firm=($("#am-firm")?.value||"").trim(); if(!firm) return toast("Add the firm name first.","warn"); const f=matchFirm(firm); const cs=f?(S.idx.byFirm[f.id]||[]).filter(c=>c.notes):[]; const b=$("#am-whyb"); b.disabled=true; b.textContent="Writing…";
+    try{ const {text}=await ask(`Write a first-person answer to "Why ${firm}?" for a student's ${trackFor(f).long} internship application. 120 to 170 words. Ground it in what the student learned from people at the firm (below); mention people by first name only if the notes say they spoke. If there are no notes, keep it to the firm's well-known positioning and say nothing specific you can't support. No em dashes, no hype words.
+
+STUDENT
+${meText()}
+Resume: ${(P().resumeText||"").slice(0,3000)||"(not provided)"}
+
+NOTES FROM CALLS WITH ${firm.toUpperCase()} PEOPLE
+${cs.map(c=>`${c.name} (${c.title||""}): ${c.notes}`).join("\n").slice(0,6000)||"(none yet)"}
+
+Return only the answer text.`); const t=$("#am-why"); if(t) t.value=tidy(text); }
+    catch(e){ toast(sampleErr(e),"crit"); } finally{ if(b){ b.disabled=false; b.textContent='Write "Why this firm?" from my calls'; } } },
+  answersGen:async()=>{ const p=P(); if(!p.resumeText) return toast("Paste your resume text in Setup first.","warn"); setBusy("_answers","on");
+    try{ const o=await askJSON(`Write first-person interview and application answers for a college student recruiting for ${p.focus}. Use only facts from the resume and profile; never invent experiences, numbers, or titles. Each answer 90 to 150 words, natural spoken tone, no em dashes, no hype words.
+
+PROFILE
+${meText()}
+
+RESUME
+${p.resumeText.slice(0,12000)}
+
+Return only JSON: {"tellMe":"","whyIB":"","whyPC":"","whyBoutique":"","strength":"","weakness":"","team":"","lead":""}`);
+      const clean={}; for(const k of ["tellMe","whyIB","whyPC","whyBoutique","strength","weakness","team","lead"]) if(typeof o?.[k]==="string") clean[k]=tidy(o[k]).slice(0,2000);
+      if(!S.db) return toast(NO_DB,"warn"); S.answers=clean; await S.db.doc("config/answers").set(clean); toast("Answers written. Edit before pasting.","ok"); }
+    catch(e){ toast(e?.code?sampleErr(e):dbErr(e),"crit"); } finally{ setBusy("_answers",null); } },
+  copyText:async el=>copy((S.answers||{})[el.dataset.k]||""),
+  copyExport:()=>copy($("#exportText")?.value||""),
+  saveSetup:async()=>{ await saveProfile(readSetup()); toast("Setup saved.","ok"); },
+  checkConns:()=>checkConns(true),
+  perms:async()=>{ try{ await S.perms.manage(); }catch{ toast("Open the page's Permissions menu in Claude to change access.","warn"); } checkConns(); },
+  // drawer actions
+  kind:el=>{ const id=el.dataset.id, k=el.dataset.k; S.kind[id]=k; S.sendAsk=null; if((k==="fu1"||k==="fu2")&&!curDraft(id)) S.drafts[id+":"+k]=followupTemplate(S.contacts[id],k); renderDrawer(true); },
+  write:el=>{ const id=el.dataset.id; delete S.drafts[id+":"+(S.kind[id]||"cold")]; writeEmail(id,S.kind[id]||"cold"); },
+  findEmail:el=>findEmail(el.dataset.id),
+  guessOne:async el=>{ const c=S.contacts[el.dataset.id]; const g=guessEmail(c,c.bounced||[]); if(!g) return toast("Need a firm with an email domain and a full last name.","warn"); await saveContact(c.id,{email:g,emailSrc:"pattern"}); },
+  gmailDraft:el=>gmailDraft(el.dataset.id),
+  sendAsk:el=>{ S.sendAsk=el.dataset.id; renderDrawer(true); },
+  sendCancel:()=>{ S.sendAsk=null; renderDrawer(true); },
+  sendNow:el=>gmailSend(el.dataset.id),
+  copyDraft:el=>{ const d=curDraftFor(el.dataset.id); if(d) copy(`Subject: ${d.subject}\n\n${d.body}`); },
+  prep:el=>prep(el.dataset.id),
+  markTalked:async el=>{ const c=S.contacts[el.dataset.id]; S.kind[c.id]="thanks"; await saveContact(c.id,{stage:"talked",talkedAt:Date.now(),log:addLog(c,"Call done")}); toast("Logged. Write the thank-you while it's fresh.","ok"); },
+  reparse:el=>reparse(el.dataset.id),
+  clayHistory:el=>clayHistory(el.dataset.id),
+  delAsk:el=>{ S.confirmDel=el.dataset.id; renderDrawer(true); },
+  delNo:()=>{ S.confirmDel=null; renderDrawer(true); },
+  delYes:async el=>{ const id=el.dataset.id; closeDrawer(); await deleteContact(id); toast("Contact deleted.",""); },
+};
+const CHG = {
+  fRole:el=>{ S.find.role=el.value; },
+  fLoc:el=>{ S.find.loc=el.value; },
+  fAll:el=>{ S.find.showAll=el.checked; updateFind(); },
+  fPickRow:el=>{ el.checked?S.find.picked.add(el.dataset.id):S.find.picked.delete(el.dataset.id); updateFind(); },
+  pfFirm:el=>{ S.pf.firm=el.value; updatePipeline(); },
+  dKind:el=>{ S.disc.kind=el.value; },
+  dText:el=>{ S.disc.text=el.value; },
+  dPlace:el=>{ S.disc.place=el.value; },
+  dSize:el=>{ S.disc.size=el.value; },
+  discPick:el=>{ el.checked?S.disc.picked.add(el.dataset.id):S.disc.picked.delete(el.dataset.id); updateDisc(); },
+  pfSort:el=>{ S.pf.sort=el.value; updatePipeline(); },
+  selAll:el=>{ const cs=filteredContacts(); cs.forEach(c=>el.checked?S.sel.add(c.id):S.sel.delete(c.id)); updatePipeline(); },
+  selRow:el=>{ el.checked?S.sel.add(el.dataset.id):S.sel.delete(el.dataset.id); updatePipeline(); },
+  bulkStage:async el=>{ const st=el.value; if(!st) return; const ids=[...S.sel]; for(const id of ids){ const c=S.contacts[id]; if(c) await saveContact(id,{stage:st,log:addLog(c,`Moved to ${stageOf(st).label}`)}).catch(()=>{}); } toast(`Moved ${ids.length} to ${stageOf(st).label}.`,"ok"); S.sel.clear(); updatePipeline(); },
+  jOnly:el=>{ S.jobs.onlyTargets=el.checked; updateJobs(); },
+  rsTarget:el=>{ S.rs.target=el.value; const w=$("#rs-jd-wrap"); if(w) w.hidden=el.value!=="jd"; },
+  jIbpc:el=>{ S.jobs.ibpcOnly=el.checked; updateJobs(); },
+  jFirm:el=>{ S.jobs.firm=el.value; updateJobs(); },
+  appStatus:el=>saveApp(el.dataset.id,{status:el.value}),
+  stage:el=>{ const c=S.contacts[el.dataset.id]; const st=el.value; const patch={stage:st,log:addLog(c,`Moved to ${stageOf(st).label}`)}; const now=Date.now();
+    if(st==="emailed"&&!c.emailedAt) Object.assign(patch,{emailedAt:now,lastSentAt:now}); if(st==="replied"&&!c.repliedAt) patch.repliedAt=now; if(st==="talked"&&!c.talkedAt) patch.talkedAt=now; if(st==="thanked"&&!c.thankedAt) patch.thankedAt=now;
+    const nk=nextAction({...c,...patch})?.kind; if(nk) S.kind[c.id]=nk; saveContact(c.id,patch); },
+  csvFile:el=>{ const f=el.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ const t=$("#bm-csv"); if(t){ t.value=String(r.result||""); csvParse(); } }; r.readAsText(f); },
+  resumeFile:async el=>{ const f=el.files?.[0]; if(!f) return; if(!S.assets) return toast("Uploading works when this page is open in Claude with edit access.","warn"); if(f.size>8e5) return toast("That PDF is over 800 KB. Export a smaller one so it attaches cleanly.","warn");
+    try{ const r=await S.assets.upload(f); await saveProfile({resume:{id:r.id,url:r.url,name:f.name,type:r.contentType||f.type||"application/pdf",size:r.sizeBytes}}); resumeCache=null; toast("Resume saved. It attaches to every first email.","ok"); }
+    catch(e){ toast(`Upload failed (${e?.code||"error"}).`,"crit"); } },
+};
+const INP = { pq:el=>{ S.pf.q=el.value; updatePipeline(); } };
+async function copy(text){ try{ await navigator.clipboard.writeText(text); toast("Copied.","ok"); }catch{ toast("Copy blocked here. Select the text and copy it manually.","warn"); } }
+
+document.addEventListener("click",e=>{ const el=e.target.closest("[data-act]"); if(!el) return; if(el.tagName==="A"&&!el.dataset.act) return; const fn=ACT[el.dataset.act]; if(fn){ if(el.tagName==="BUTTON"||el.tagName==="A") e.preventDefault(); fn(el,e); } });
+document.addEventListener("change",e=>{ const el=e.target.closest("[data-chg]"); if(el&&CHG[el.dataset.chg]) CHG[el.dataset.chg](el,e);
+  const fld=e.target.closest("[data-field]"); if(fld){ const id=fld.dataset.id, k=fld.dataset.field; const c=S.contacts[id]; if(!c) return; let v=fld.value;
+    if(k==="callAt"){ v=v?new Date(v).getTime():null; const patch={callAt:v}; if(v&&["lead","drafted","emailed","fu1","fu2","replied"].includes(c.stage)){ patch.stage="scheduled"; patch.log=addLog(c,`Call set for ${fmtDT(v)}`); } saveContact(id,patch); return; }
+    if(k==="email"){ v=v.trim().toLowerCase(); if(v&&!EMAIL_RE.test(v)) return toast("That doesn't look like an email address.","warn"); saveContact(id,{email:v,emailSrc:v?"manual":""}); return; }
+    saveContact(id,{[k]:v}); }
+  const dft=e.target.closest("[data-draft]"); if(dft){ const id=dft.dataset.id; const k=S.kind[id]||"cold"; const d={...(curDraft(id)||{kind:k,subject:"",body:""}),[dft.dataset.draft]:dft.value,kind:k}; S.drafts[id+":"+k]=d; if(k!=="fu1"&&k!=="fu2") saveContact(id,{draft:d}).catch(()=>{}); }
+});
+document.addEventListener("input",e=>{ const el=e.target.closest("[data-inp]"); if(el&&INP[el.dataset.inp]) INP[el.dataset.inp](el,e);
+  const rse=e.target.closest("[data-rsedit]"); if(rse){ const l=S.rs.lines[Number(rse.dataset.rsedit)]; if(l){ l.edited=rse.value; rsPersist(); const fin=$("#rsFinal .final"); if(fin) fin.textContent=rsFinal(); } }
+  const dft=e.target.closest("[data-draft]"); if(dft){ const id=dft.dataset.id; const k=S.kind[id]||"cold"; S.drafts[id+":"+k]={...(curDraft(id)||{kind:k,subject:"",body:""}),[dft.dataset.draft]:dft.value,kind:k}; } });
+document.getElementById("drawer").addEventListener("focusout",e=>{ if(S.drawerDirty&&!$("#drawer").contains(e.relatedTarget)) setTimeout(()=>renderDrawer(),0); });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ if(!$("#modal").hidden) closeModal(); else if(S.open) closeDrawer(); } });
+$("#modal").addEventListener("click",e=>{ if(e.target.id==="modal") closeModal(); });
+
+/* ---------- boot ---------- */
+async function checkConns(manual){
+  if(!S.mcp){ for(const n of ["Clay","Gmail","Indeed"]) S.conn[n]="missing"; renderConns(); if(S.tab==="setup") updateSetup(); return; }
+  try{ const r=await S.mcp.listTools(); const by={}; for(const s of r?.servers||[]) by[s.server]=s;
+    for(const n of ["Clay","Gmail","Indeed"]){ const s=by[n]; S.conn[n]=!s?"missing":s.authStatus==="needs_reauth"?"reauth":(s.tools||[]).length?"ok":"missing"; } }
+  catch{ if(manual) toast("Couldn't read connector status.","warn"); }
+  renderConns(); if(S.tab==="setup") updateSetup();
+}
+async function maybeAutoSync(){
+  if(S.autoSynced||!S.mcp||!S.perms||!S.ready.contacts) return; S.autoSynced=true;
+  if(Date.now()-S.lastSync<20*60e3) return;
+  try{ const st=await S.perms.state("mcp:Gmail"); if(st==="granted") syncGmail(false); }catch{}
+}
+function subscribe(){
+  const db=S.db; const fail=name=>e=>toast(`Couldn't load ${name} (${e?.code||"error"}). Reload the page.`,"crit");
+  db.collection("contacts").onSnapshot(s=>{ const m={}; for(const d of s.docs) if(d.exists) m[d.id]={...d.data(),id:d.id}; S.contacts=m; S.ready.contacts=true; dataChanged(); maybeAutoSync(); },fail("contacts"));
+  db.collection("targets").onSnapshot(s=>{ const m={}; for(const d of s.docs) if(d.exists) m[d.id]={...d.data()}; S.targets=m; S.ready.targets=true; rebuildFirms(); dataChanged(); },fail("firms"));
+  db.collection("apps").onSnapshot(s=>{ const m={}; for(const d of s.docs) if(d.exists) m[d.id]={...d.data(),id:d.id}; S.apps=m; S.ready.apps=true; dataChanged(); },fail("applications"));
+  db.collection("jobs").onSnapshot(s=>{ const m={}; for(const d of s.docs) if(d.exists) m[d.id]={...d.data()}; for(const [k,v] of Object.entries(S.firmJobs)) if(!m[k]||(v.pulledAt||0)>(m[k].pulledAt||0)) m[k]=v; S.firmJobs=m; const first=!S.ready.jobs; S.ready.jobs=true; dataChanged(); if(first&&S.tab==="jobs") maybeAutoPull(); },()=>{ S.ready.jobs=true; });
+  db.doc("config/profile").onSnapshot(d=>{ S.profile=d.exists?d.data():null; const first=!S.ready.profile; S.ready.profile=true; if(first||S.tab!=="setup"||!$("#view")?.contains(document.activeElement)){ if(S.tab==="setup"&&!first) mountView(); } if(first) mountView(); dataChanged(); },fail("profile"));
+  db.doc("config/answers").onSnapshot(d=>{ S.answers=d.exists?d.data():null; dataChanged(); },()=>{});
+  db.doc("config/lastRun").onSnapshot(d=>{ S.lastRun=d.exists?d.data():null; dataChanged(); },()=>{});
+  db.doc("config/resumeReview").onSnapshot(d=>{ if(d.exists&&!S.rs.running&&!S.rs.dirty){ const v=d.data(); S.rs.lines=Array.isArray(v.lines)?v.lines:[]; S.rs.overall=v.overall||null; S.rs.keywords=v.keywords||[]; S.rs.target=v.target||S.rs.target; dataChanged(); } },()=>{});
+}
+async function boot(){
+  renderTabs(); renderConns(); mountView();
+  const use=n=>(window.claude&&typeof window.claude.use==="function")?window.claude.use(n).catch(()=>null):Promise.resolve(null);
+  const [db,mcp,sample,assets,downloads,perms]=await Promise.all(["db","mcp","sample","assets","downloads","permissions"].map(use));
+  Object.assign(S,{db,mcp,sample,assets,downloads,perms,booted:true});
+  if(db) subscribe(); else { Object.keys(S.ready).forEach(k=>S.ready[k]=true); }
+  mountView(); checkConns();
+}
+boot();
+</script>
