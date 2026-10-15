@@ -386,14 +386,18 @@ const CAREERS = {
 const INDEED_Q = {gs:"Goldman Sachs",jpm:"JPMorgan",bofa:"Bank of America",citi:"Citi",rbc:"RBC Capital Markets",moelis:"Moelis",pwp:"Perella Weinberg",gugg:"Guggenheim Securities",bx:"Blackstone",owl:"Blue Owl",hps:"HPS Investment Partners",kkr:"KKR",carlyle:"Carlyle",oaktree:"Oaktree Capital",churchill:"Churchill Asset Management",mainst:"Main Street Capital",crestline:"Crestline Investors",mizuho:"Mizuho",truist:"Truist Securities",bmo:"BMO Capital Markets",roth:"Rothschild",cvp:"Centerview Partners",apollo:"Apollo Global Management",ares:"Ares Management",sixth:"Sixth Street",antares:"Antares Capital",monroe:"Monroe Capital"};
 const JRX = {
   intern:/\b(intern|internship|summer|co-?op|insight|sophomore|freshman|fellowship|early careers?)\b/i,
-  excl:/\b(audit|compliance|engineer\w*|developer|software|technologist|operations|ops|human resources|recruit\w*|legal|counsel|paralegal|assistant|administrative|receptionist|wealth|tax|accountant|accounting|controller|data|security|facilities|marketing|sales|trader|trading|risk|kyc|aml|cyber|payroll|investor relations|client service|fund administration|reporting|treasury|research)\b/i,
+  excl:/\b(audit|compliance|engineer\w*|developer|software|technologist|operations|ops|human resources|recruiter|talent acquisition|legal|counsel|paralegal|assistant|administrative|receptionist|wealth|tax|accountant|accounting|controller|data|security|facilities|marketing|sales|trader|trading|risk|kyc|aml|cyber|payroll|investor relations|client service|fund administration|reporting|treasury|research|trainer|annotation|consultant|consulting|commission based)\b/i,
   pcStrong:/\b(private credit|direct lending|private debt|clo|asset[- ]based|specialty finance|special situations|opportunistic credit)\b/i,
   ib:/\b(investment bank\w*|ib|m&a|mergers|advisory|capital markets|ecm|dcm|leveraged finance|levfin|restructuring|coverage|financial institutions|fig|tmt|sponsors?|capital solutions|corporate finance|private capital|strategic|generalist)\b/i,
   pc:/\b(credit|lending|loans?|debt|underwrit\w*|distressed|mezzanine)\b/i,
+  strong:/\b(investment bank\w*|m&a|mergers|private credit|direct lending|leveraged finance|restructuring|private debt)\b/i,
+  notFirm:/\b(selby jennings|afterquery|dataannotation|nepternship|recruit\w*|staffing|talent|search partners|experts|careers?)\b/i,
 };
-function classifyJob(title,firm){
+/* Unknown employers only count when the title is clearly IB or private credit, and never for staffing or gig sites. */
+function classifyJob(title,firm,company){
   const t=String(title||""), intern=JRX.intern.test(t); let cat="other";
-  if(!JRX.excl.test(t)){ if(JRX.pcStrong.test(t)) cat="PC"; else if(JRX.ib.test(t)) cat=firm?.type==="PC"?"PC":"IB"; else if(JRX.pc.test(t)) cat="PC"; else if(intern&&/analyst|associate/i.test(t)) cat=firm?.type==="PC"?"PC":"IB"; }
+  if(!firm&&company){ if(!JRX.excl.test(t)&&!JRX.notFirm.test(String(company))){ if(JRX.pcStrong.test(t)) cat="PC"; else if(JRX.strong.test(t)) cat="IB"; } }
+  else if(!JRX.excl.test(t)){ if(JRX.pcStrong.test(t)) cat="PC"; else if(JRX.ib.test(t)) cat=firm?.type==="PC"?"PC":"IB"; else if(JRX.pc.test(t)) cat="PC"; else if(intern&&/analyst|associate/i.test(t)) cat=firm?.type==="PC"?"PC":"IB"; }
   const level=intern?"Intern":/vice president|\bvp\b|director|principal|managing director|partner/i.test(t)?"VP+":/associate/i.test(t)?"Associate":/analyst/i.test(t)?"Analyst":"";
   return {cat,level};
 }
@@ -797,6 +801,9 @@ function nextFirmBatch(one){
   if(one) return [firmById(one)].filter(f=>f&&f.domain);
   return FIRMS.filter(f=>f.on&&f.domain).sort((a,b)=>((S.targets[a.id]?.lastSearched||0)>Date.now()-6*DAY)-((S.targets[b.id]?.lastSearched||0)>Date.now()-6*DAY)||firmPeople(a.id).length-firmPeople(b.id).length||a.name.localeCompare(b.name)).slice(0,10);
 }
+/* Clay's title match is loose; keep only banking and credit roles. */
+const NOT_BANKER=/\b(wealth|pwm|private wealth|sales|trading|s&t|quant\w*|risk|strateg(y|ist)|equity research|research|real estate|operations|technology|engineer\w*|audit|compliance|chief financial|cfo|marketing|human resources|product|data|mortgage|loan officer|mentor|candidate|student|teaching)\b/i;
+const BANKER=/\b(investment bank\w*|banking|m&a|mergers|capital markets|credit|lending|leveraged|restructuring|advisory|coverage|private equity|private capital|financial analyst|summer (analyst|associate)|analyst|associate|vice president|director|managing director)\b/i;
 function peopleDsl(){
   const p=P(), q=s=>`"${String(s).replace(/["\\]/g,"")}"`, names=(p.schoolNames||[]).filter(Boolean);
   const titles=`experiences.any(is_current = true and job_title is_similar_to ("Investment Banking Analyst", "Investment Banking Associate", "Vice President", "Summer Analyst", "Private Credit Analyst", "Private Credit Associate", "Direct Lending"))`;
@@ -813,7 +820,8 @@ async function findPeople(oneFirm){
     let r=await call("Clay","search-contacts",{companyIdentifiers:firms.map(f=>f.domain),dslQuery:peopleDsl()}); let page=1;
     const take=async r=>{ for(const c of (r?.contacts||[])){
       const company=c.latest_experience_company||""; const dom=String(c.domain||c.companyIdentifier||"").toLowerCase();
-      const f=matchFirm(company)||firms.find(x=>x.domain===dom); if(!f) continue;
+      const f=matchFirm(company)||(company?null:firms.find(x=>x.domain===dom)); if(!f) continue;
+      const title=c.latest_experience_title||""; if(NOT_BANKER.test(title)||!BANKER.test(title)||/\b(business|data) analyst\b/i.test(title)) continue;
       const id=idFor(c.url,c.name,company); if(S.contacts[id]) continue;
       const {first,last}=splitName(c.name);
       const alum=S.pfind.scope==="alumni";
@@ -945,7 +953,8 @@ async function saveBatch(){
 }
 
 /* ---------- Step 4: Jobs ---------- */
-function jobKey(j){ return String(j.url||(j.title+"|"+j.company)).toLowerCase(); }
+/* Indeed hands out a new short link on every search, so jobs are keyed by title, company and location. */
+function jobKey(j){ return `${j.title}|${j.company}|${j.location}`.replace(/\s+/g," ").trim().toLowerCase(); }
 function isNewJob(j){ return j.firstSeen && Date.now()-j.firstSeen<3*DAY; }
 function allJobs(){
   const out=[], seen=new Set();
@@ -1018,7 +1027,7 @@ async function runJobs(){
   for(const [j,loc] of combos){
     try{ const input={search:j.q,location:loc,country_code:"US"}; if(j.type) input.job_type=j.type;
       const r=await call("Indeed","search_jobs",input,{cache:{staleTime:300000,gcTime:6*3600000}});
-      for(const x of parseIndeed(r)){ if(!x.title) continue; if(found.some(y=>jobKey(y)===jobKey(x))) continue; Object.assign(x,classifyJob(x.title,matchFirm(x.company))); found.push(x); } }
+      for(const x of parseIndeed(r)){ if(!x.title) continue; if(found.some(y=>jobKey(y)===jobKey(x))) continue; Object.assign(x,classifyJob(x.title,matchFirm(x.company),x.company)); found.push(x); } }
     catch(e){ if(!S.jobs.errs.length) S.jobs.errs.push(errText(e,"Indeed")); }
   }
   const prev=S.firmJobs._open?.items||[]; const merged=[...found,...prev.filter(p=>!found.some(f=>jobKey(f)===jobKey(p)))];

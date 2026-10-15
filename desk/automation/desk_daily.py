@@ -104,11 +104,17 @@ TITLES = ["Investment Banking Analyst", "Investment Banking Associate", "Summer 
           "Private Credit Analyst", "Private Credit Associate", "Direct Lending Associate"]
 JRX = {
     "intern": re.compile(r"\b(intern|internship|summer|co-?op|insight|sophomore|freshman|fellowship|early careers?)\b", re.I),
-    "excl": re.compile(r"\b(audit|compliance|engineer\w*|developer|software|technologist|operations|ops|human resources|recruit\w*|legal|counsel|paralegal|assistant|administrative|receptionist|wealth|tax|accountant|accounting|controller|data|security|facilities|marketing|sales|trader|trading|risk|kyc|aml|cyber|payroll|investor relations|client service|fund administration|reporting|treasury|research)\b", re.I),
+    "excl": re.compile(r"\b(audit|compliance|engineer\w*|developer|software|technologist|operations|ops|human resources|recruiter|talent acquisition|legal|counsel|paralegal|assistant|administrative|receptionist|wealth|tax|accountant|accounting|controller|data|security|facilities|marketing|sales|trader|trading|risk|kyc|aml|cyber|payroll|investor relations|client service|fund administration|reporting|treasury|research|trainer|annotation|consultant|consulting|commission based)\b", re.I),
     "pcStrong": re.compile(r"\b(private credit|direct lending|private debt|clo|asset[- ]based|specialty finance|special situations|opportunistic credit)\b", re.I),
     "ib": re.compile(r"\b(investment bank\w*|ib|m&a|mergers|advisory|capital markets|ecm|dcm|leveraged finance|levfin|restructuring|coverage|financial institutions|fig|tmt|sponsors?|capital solutions|corporate finance|private capital|strategic|generalist)\b", re.I),
     "pc": re.compile(r"\b(credit|lending|loans?|debt|underwrit\w*|distressed|mezzanine)\b", re.I),
 }
+# People search results sometimes include roles outside banking and credit; skip those as leads.
+NOT_BANKER = re.compile(r"\b(wealth|pwm|private wealth|sales|trading|s&t|quant\w*|risk|strateg(y|ist)|equity research|research|real estate|operations|technology|engineer\w*|audit|compliance|chief financial|cfo|marketing|human resources|product|data|mortgage|loan officer|mentor|candidate|student|teaching)\b", re.I)
+BANKER = re.compile(r"\b(investment bank\w*|banking|m&a|mergers|capital markets|credit|lending|leveraged|restructuring|advisory|coverage|private equity|private capital|financial analyst|summer (analyst|associate)|analyst|associate|vice president|director|managing director)\b", re.I)
+# Only postings with clearly IB or credit titles make a firm a wish-list candidate, and never staffing or gig sites.
+STRONG_ROLE = re.compile(r"\b(investment bank\w*|m&a|mergers|private credit|direct lending|leveraged finance|restructuring|private debt)\b", re.I)
+NOT_FIRM = re.compile(r"\b(selby jennings|afterquery|dataannotation|nepternship|recruit\w*|staffing|talent|search partners|experts|careers?)\b", re.I)
 EMAIL_RE = re.compile(r"[A-Z0-9._%+'-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.I)
 WATCH = ("lead", "drafted", "emailed", "fu1", "fu2")
 RANK = {"lead": 0, "drafted": 0, "emailed": 1, "fu1": 2, "fu2": 3}
@@ -282,11 +288,18 @@ def infer_pattern(email, first, last):
     return next((p for p in PAT_ORDER if PATS[p](first, last) == local), None)
 
 
-def classify(title, firm):
+def classify(title, firm, company=""):
     t = str(title or "")
     intern = bool(JRX["intern"].search(t))
     cat = "other"
-    if not JRX["excl"].search(t):
+    if firm is None and company:
+        # Unknown employer: only clearly IB or private-credit titles count, and never staffing or gig sites.
+        if not JRX["excl"].search(t) and not NOT_FIRM.search(company):
+            if JRX["pcStrong"].search(t):
+                cat = "PC"
+            elif STRONG_ROLE.search(t):
+                cat = "IB"
+    elif not JRX["excl"].search(t):
         if JRX["pcStrong"].search(t):
             cat = "PC"
         elif JRX["ib"].search(t):
@@ -344,7 +357,8 @@ VERIFIED = ("clay", "import", "replied", "manual")
 
 
 def job_key(j):
-    return str(j.get("url") or f"{j.get('title')}|{j.get('company')}").lower()
+    # Indeed hands out a new short link on every search, so the link can't identify a posting.
+    return re.sub(r"\s+", " ", f"{j.get('title')}|{j.get('company')}|{j.get('location')}").strip().lower()
 
 
 def posted_ts(j):
@@ -530,9 +544,14 @@ def apply(db_dir, work):
         for c in p.get("contacts") or []:
             company = c.get("latest_experience_company") or ""
             dom = str(c.get("domain") or c.get("companyIdentifier") or "").lower()
-            f = d.match_firm(company) or next((x for x in d.firms if x.get("domain") == dom), None)
+            # Trust the employer name first; fall back to the search domain only when Clay gave no employer.
+            f = d.match_firm(company) or (None if company else next((x for x in d.firms if x.get("domain") == dom), None))
             cid = contact_id(c.get("url"), c.get("name"), company)
             if cid in seen or not f or not c.get("name"):
+                continue
+            title = c.get("latest_experience_title") or ""
+            if NOT_BANKER.search(title) or not BANKER.search(title) or re.search(r"\b(business|data) analyst\b", title, re.I):
+                summary["skippedTitles"] += 1
                 continue
             seen.add(cid)
             per_firm[f["id"]].append((cid, c, f, p.get("taskId"), alum))
@@ -603,14 +622,14 @@ def apply(db_dir, work):
             if not j["title"] or k in seen_j:
                 continue
             seen_j.add(k)
-            cat, level = classify(j["title"], d.match_firm(j["company"]))
+            cat, level = classify(j["title"], d.match_firm(j["company"]), j["company"])
             fresh.append({**j, "cat": cat, "level": level})
         fresh.sort(key=posted_ts, reverse=True)
         fresh = merge_seen(prev, fresh)
         merged = fresh + [p for p in prev if job_key(p) not in seen_j]
         emit("set", "jobs", "_open", {"pulledAt": now, "items": merged[:150]}, "_open" in d.jobs)
         for j in fresh:
-            if j["cat"] not in ("IB", "PC"):
+            if j["cat"] not in ("IB", "PC") or not STRONG_ROLE.search(j["title"]) or NOT_FIRM.search(j["company"] or ""):
                 continue
             m = d.match_firm(j["company"])
             if m and m["on"]:
@@ -650,7 +669,7 @@ def apply(db_dir, work):
             ent = str(r.get("entityId") or r.get("profile_id") or "")
             if cid and ent:
                 ent_to_cid[(ch, ent)] = cid
-    found = {}
+    found, blocked = {}, set()
     for ch, data in verifies:
         for r in data.get("contacts") or data.get("entities") or data.get("results") or []:
             ent = str(r.get("entityId") or r.get("profile_id") or r.get("id") or "")
@@ -658,6 +677,9 @@ def apply(db_dir, work):
             if not cid:
                 continue
             hits = [e for e in (r.get("enrichments") or []) if re.search(r"email", str(e.get("name") or e.get("type") or e.get("dataPointName") or e.get("title") or ""), re.I)]
+            if hits and all(str(h.get("state") or "").lower() == "error" for h in hits):
+                blocked.add(cid)  # Clay refused (plan limit or outage): try again another day
+                continue
             c = d.contacts[cid]
             f = d.firm_of(c)
             emails = [e for e in emails_in(json.dumps([h.get("value") for h in hits])) if e not in (c.get("bounced") or [])]
@@ -665,7 +687,8 @@ def apply(db_dir, work):
             if best:
                 found[cid] = best
     tried = {cid for ch, _ in verifies for cid in chunks.get(ch, {}).get("contact_ids", [])}
-    for cid in tried:
+    summary["verifyBlocked"] += len(blocked)
+    for cid in tried - blocked:
         c = d.contacts.get(cid)
         if not c:
             continue
