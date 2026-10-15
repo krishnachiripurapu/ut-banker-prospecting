@@ -4,19 +4,22 @@
 A scheduled Claude session makes the tool calls (ArtifactData, Gmail, Clay, Indeed).
 This script does the bookkeeping, so every run applies the same rules as the page:
 
-    python3 desk_daily.py plan  DB_DIR        > WORK/plan.json
-    python3 desk_daily.py apply DB_DIR WORK   > WORK/summary.json
+    python3 desk_daily.py plan  DB_DIR                     > WORK/plan.json
+    python3 desk_daily.py apply DB_DIR WORK                > WORK/summary.json
+    python3 desk_daily.py firms DB_DIR WORK domains.json   (adds hiring firms to the wish list)
 
 DB_DIR   ArtifactData `list` dumps made with out_dir:
          DB_DIR/contacts/*.json, DB_DIR/targets/*.json, DB_DIR/config/*.json, DB_DIR/jobs/*.json
 WORK/inputs.jsonl
          one line per connector result the session saved to a file:
-         {"kind": "gmail_sent" | "gmail_reply" | "gmail_bounce" | "clay" | "indeed", "path": "...", "firm_id": "<indeed only>"}
+         {"kind": "gmail_sent" | "gmail_reply" | "gmail_bounce" | "clay" | "clay_any" | "clay_lookup" | "clay_verify"
+                  | "indeed" | "indeed_open", "path": "...", "firm_id": "<indeed only>", "chunk": <clay_lookup/clay_verify only>}
 apply writes WORK/writes/*.json (one document or patch each) and WORK/writes.json:
          [{"op": "set" | "update", "collection": ..., "doc_id": ..., "file_path": ..., "existing": bool}]
          Entries with existing=true need the document's current version as if_version.
 
-Nothing here sends email or spends Clay credits; it only reads what the session already fetched.
+Nothing here sends email. Clay credits are spent only by the session's add-contact-data-points calls,
+which plan["verify"] caps at the profile's verifyPerDay.
 """
 import collections
 import json
@@ -111,6 +114,16 @@ WATCH = ("lead", "drafted", "emailed", "fu1", "fu2")
 RANK = {"lead": 0, "drafted": 0, "emailed": 1, "fu1": 2, "fu2": 3}
 MAX_CLAY_BATCHES = 6      # 10 firms per Clay search
 MAX_INDEED_FIRMS = 10     # 2 Indeed searches per firm
+MAX_FALLBACK_BATCHES = 2  # banker-title searches without the school filter, only when alumni searches come up short
+MAX_JOB_FIRMS = 5         # hiring firms added to the wish list per day
+OPEN_SEARCHES = [         # nationwide and Texas IB / credit searches, saved as jobs/_open
+    ("investment banking summer analyst", "United States"),
+    ("private credit summer analyst", "United States"),
+    ("direct lending analyst", "United States"),
+    ("investment banking analyst", "Houston, TX"),
+    ("investment banking analyst", "Dallas, TX"),
+    ("investment banking", "Austin, TX"),
+]
 
 
 # ------------------------------------------------------------------ helpers
@@ -304,7 +317,7 @@ def parse_indeed(raw):
             return m.group(1).strip() if m else ""
         m = re.search(r"https?://\S+", g("View Job URL"))
         url = m.group(0) if m else ""
-        jobs.append({"title": b.split("\n")[0].strip(), "company": g("Company"), "location": g("Location"),
+        jobs.append({"title": b.split("\n")[0].strip(), "jobId": g("Job Id"), "company": g("Company"), "location": g("Location"),
                      "posted": g("Posted on"), "type": g("Job Type"), "pay": g("Compensation"), "url": url})
     return jobs
 
@@ -313,7 +326,10 @@ def q(s):
     return '"' + re.sub(r'["\\]', "", str(s)) + '"'
 
 
-def build_dsl(profile):
+def build_dsl(profile, alumni=True):
+    titles = f"experiences.any(is_current = true and job_title is_similar_to ({', '.join(q(t) for t in TITLES)}))"
+    if not alumni:
+        return f"select from people where {titles}"
     names = [n for n in profile.get("schoolNames") or [] if n]
     kw = profile.get("schoolKeyword") or ""
     edu = []
@@ -321,8 +337,38 @@ def build_dsl(profile):
         edu.append(f"school_name in ({', '.join(q(n) for n in names)})")
     if kw:
         edu.append(f"school_name contains {q(kw)}")
-    return (f"select from people where education.any({' or '.join(edu)}) and experiences.any(is_current = true and "
-            f"job_title is_similar_to ({', '.join(q(t) for t in TITLES)}))")
+    return f"select from people where education.any({' or '.join(edu)}) and {titles}"
+
+
+VERIFIED = ("clay", "import", "replied", "manual")
+
+
+def job_key(j):
+    return str(j.get("url") or f"{j.get('title')}|{j.get('company')}").lower()
+
+
+def posted_ts(j):
+    try:
+        return datetime.strptime(j.get("posted") or "", "%B %d, %Y").timestamp()
+    except ValueError:
+        return 0
+
+
+def verify_queue(d, now):
+    """Leads whose email is a guess or missing, best first, capped at the daily verify budget."""
+    budget = int(d.profile.get("verifyPerDay") if d.profile.get("verifyPerDay") is not None else 15)
+    rows = []
+    for cid, c in d.contacts.items():
+        f = d.firm_of(c)
+        if (c.get("stage") or "lead") != "lead" or (c.get("email") and c.get("emailSrc") in VERIFIED):
+            continue
+        if not f or not f.get("domain") or len(norm_name(c.get("last"))) < 2:
+            continue
+        if c.get("verifyTried") and now - c["verifyTried"] < 14 * DAY:
+            continue
+        rows.append((-len(c.get("ties") or []), c.get("createdAt") or 0, cid, c, f))
+    rows.sort(key=lambda r: r[:2])
+    return [(cid, c, f) for _, _, cid, c, f in rows[:max(0, budget)]]
 
 
 # ------------------------------------------------------------------ plan
@@ -343,12 +389,21 @@ def plan(db_dir):
     added_today = sum(1 for c in d.contacts.values() if (c.get("createdAt") or 0) >= sod)
     quota = max(0, int(d.profile.get("dailyLeadGoal") or 50) - added_today)
     targets = sorted([f for f in d.firms if f["on"] and f.get("domain")], key=lambda f: (d.count[f["id"]], f["name"]))
-    batches = []
+    batches, fallback = [], []
     if quota:
         dsl = build_dsl(d.profile)
         for i in range(0, min(len(targets), MAX_CLAY_BATCHES * 10), 10):
             ch = targets[i:i + 10]
             batches.append({"firm_ids": [f["id"] for f in ch], "companyIdentifiers": [f["domain"] for f in ch], "dslQuery": dsl})
+        any_dsl = build_dsl(d.profile, alumni=False)
+        for i in range(0, min(len(targets), MAX_FALLBACK_BATCHES * 10), 10):
+            ch = targets[i:i + 10]
+            fallback.append({"firm_ids": [f["id"] for f in ch], "companyIdentifiers": [f["domain"] for f in ch], "dslQuery": any_dsl})
+
+    vq = verify_queue(d, now)
+    verify = [{"chunk": i // 10, "contact_ids": [cid for cid, _, _ in vq[i:i + 10]],
+               "contactIdentifiers": [{"contactName": c["name"], "companyIdentifier": f["domain"]} for _, c, f in vq[i:i + 10]]}
+              for i in range(0, len(vq), 10)]
 
     stale = sorted([f for f in d.firms if f["on"]], key=lambda f: (d.jobs.get(f["id"], {}).get("pulledAt") or 0))
     indeed = []
@@ -359,8 +414,10 @@ def plan(db_dir):
         qs = [f"{name} credit", f"{name} analyst"] if f["type"] == "PC" else [f"{name} investment banking", f"{name} analyst"]
         indeed.append({"firm_id": f["id"], "queries": [{"search": s, "location": "United States", "country_code": "US"} for s in qs]})
 
+    open_jobs = [{"search": s, "location": loc, "country_code": "US"} for s, loc in OPEN_SEARCHES]
     return {"now": now, "watched_emails": len(watch), "gmail": gmail,
-            "clay": {"quota": quota, "batches": batches}, "indeed": indeed}
+            "clay": {"quota": quota, "batches": batches, "fallback_batches": fallback},
+            "verify": verify, "indeed": indeed, "indeed_open": open_jobs}
 
 
 # ------------------------------------------------------------------ apply
@@ -373,7 +430,8 @@ def apply(db_dir, work):
         with open(path, encoding="utf-8") as f:
             inputs = [json.loads(l) for l in f if l.strip()]
     sent, replies, bounced = collections.defaultdict(list), collections.defaultdict(list), set()
-    clay_payloads, indeed_by_firm = [], collections.defaultdict(list)
+    clay_payloads, indeed_by_firm, open_items = [], collections.defaultdict(list), []
+    lookups, verifies = {}, []
     for inp in inputs:
         try:
             data = load_json_or_text(inp["path"])
@@ -398,10 +456,16 @@ def apply(db_dir, work):
             for t in threads:
                 for m in t.get("messages", []):
                     bounced.update(emails_in(f"{m.get('snippet', '')} {m.get('subject', '')}"))
-        elif kind == "clay" and isinstance(data, dict):
-            clay_payloads.append(data)
+        elif kind in ("clay", "clay_any") and isinstance(data, dict):
+            clay_payloads.append((data, kind == "clay"))
+        elif kind == "clay_lookup" and isinstance(data, dict):
+            lookups[int(inp.get("chunk") or 0)] = data
+        elif kind == "clay_verify" and isinstance(data, dict):
+            verifies.append((int(inp.get("chunk") or 0), data))
         elif kind == "indeed":
             indeed_by_firm[inp.get("firm_id")].extend(parse_indeed(data))
+        elif kind == "indeed_open":
+            open_items.extend(parse_indeed(data))
 
     writes, summary = [], collections.Counter()
     os.makedirs(os.path.join(work, "writes"), exist_ok=True)
@@ -411,6 +475,17 @@ def apply(db_dir, work):
         with open(fp, "w", encoding="utf-8") as f:
             json.dump(body, f)
         writes.append({"op": op, "collection": coll, "doc_id": doc_id, "file_path": fp, "existing": existing})
+
+    # One update per contact per run, so a single if_version covers it.
+    cpatch = collections.OrderedDict()
+
+    def patch_contact(cid, patch):
+        cur = cpatch.setdefault(cid, {})
+        logs = [l for l in patch.pop("log", []) if l.get("t") == now]
+        cur.update(patch)
+        if logs:
+            base = cur.get("log") or list(d.contacts[cid].get("log") or [])
+            cur["log"] = (logs + base)[:40]
 
     # Gmail: sent, replies, bounces (same rules as syncGmail in the page)
     for cid, c in d.contacts.items():
@@ -446,12 +521,12 @@ def apply(db_dir, work):
                 patch.update(stage="replied", repliedAt=rp[-1], emailSrc="replied", log=add_log(c, "They replied", now))
                 summary["replies"] += 1
         if patch:
-            emit("update", "contacts", cid, patch, True)
+            patch_contact(cid, patch)
 
     # Clay: new leads, spread across the firms with the fewest people first
     quota = max(0, int(d.profile.get("dailyLeadGoal") or 50) - sum(1 for c in d.contacts.values() if (c.get("createdAt") or 0) >= day_start(now)))
     seen, per_firm = set(d.contacts), collections.defaultdict(list)
-    for p in clay_payloads:
+    for p, alum in clay_payloads:
         for c in p.get("contacts") or []:
             company = c.get("latest_experience_company") or ""
             dom = str(c.get("domain") or c.get("companyIdentifier") or "").lower()
@@ -460,7 +535,7 @@ def apply(db_dir, work):
             if cid in seen or not f or not c.get("name"):
                 continue
             seen.add(cid)
-            per_firm[f["id"]].append((cid, c, f, p.get("taskId")))
+            per_firm[f["id"]].append((cid, c, f, p.get("taskId"), alum))
     order = sorted(per_firm, key=lambda fid: d.count[fid])
     picked = []
     while len(picked) < quota and any(per_firm[f] for f in order):
@@ -468,20 +543,32 @@ def apply(db_dir, work):
             if per_firm[fid] and len(picked) < quota:
                 picked.append(per_firm[fid].pop(0))
     school = (d.profile.get("schoolNames") or [d.profile.get("school")])[0]
-    for i, (cid, c, f, task) in enumerate(picked):
+    for i, (cid, c, f, task, alum) in enumerate(picked):
         first, last = split_name(c["name"])
         doc = {"name": c["name"], "first": first, "last": last, "firm": c.get("latest_experience_company") or f["name"], "firmId": f["id"],
                "title": c.get("latest_experience_title") or "", "location": c.get("location_name") or "", "linkedin": c.get("url") or "",
-               "startedRole": c.get("latest_experience_start_date") or "", "school": school, "ties": [f"{d.profile.get('school')} alum"],
-               "stage": "lead", "source": "Daily Clay search", "clayTask": task or "", "clayEntity": str(c.get("entityId") or c.get("profile_id") or ""),
-               "createdAt": now + i, "log": [{"t": now, "d": "Added by the daily update (Clay school search)"}]}
+               "startedRole": c.get("latest_experience_start_date") or "", "school": school if alum else "",
+               "ties": [f"{d.profile.get('school')} alum"] if alum else [],
+               "stage": "lead", "source": "Daily Clay search" if alum else "Daily Clay banker search", "clayTask": task or "",
+               "clayEntity": str(c.get("entityId") or c.get("profile_id") or ""),
+               "createdAt": now + i, "log": [{"t": now, "d": "Added by the daily update (" + ("alumni" if alum else "banker") + " search)"}]}
         g = d.guess_email(doc)
         if g:
             doc.update(email=g, emailSrc="pattern")
         emit("set", "contacts", cid, doc, False)
         summary["newLeads"] += 1
 
-    # Indeed: one document per firm, same shape the page writes
+    # Indeed: one document per firm, same shape the page writes. firstSeen marks new drops.
+    def merge_seen(prev_items, items):
+        seen_at = {job_key(j): j.get("firstSeen") or 0 for j in prev_items or []}
+        out = []
+        for j in items:
+            fs = seen_at.get(job_key(j)) or now
+            if fs == now:
+                summary["newRoles" if j.get("cat") in ("IB", "PC") else "newOther"] += 1
+            out.append({**j, "firstSeen": fs})
+        return out
+
     for fid, items in indeed_by_firm.items():
         f = d.by_id.get(fid)
         if not f:
@@ -493,29 +580,153 @@ def apply(db_dir, work):
             m = d.match_firm(j["company"])
             if not ((m and m["id"] == fid) or (not m and name_rx.search(j["company"] or ""))):
                 continue
-            k = (j["url"] or j["title"]).lower()
+            k = job_key(j)
             if not j["title"] or k in seen_j:
                 continue
             seen_j.add(k)
             cat, level = classify(j["title"], f)
             keep.append({**j, "cat": cat, "level": level})
-        def posted(j):
-            try:
-                return datetime.strptime(j["posted"], "%B %d, %Y").timestamp()
-            except ValueError:
-                return 0
-        keep.sort(key=posted, reverse=True)
-        emit("set", "jobs", fid, {"pulledAt": now, "items": keep[:40]}, fid in d.jobs)
+        keep.sort(key=posted_ts, reverse=True)
+        keep = merge_seen((d.jobs.get(fid) or {}).get("items"), keep[:40])
+        emit("set", "jobs", fid, {"pulledAt": now, "items": keep}, fid in d.jobs)
         summary["firmsPulled"] += 1
         summary["ibpcRoles"] += sum(1 for j in keep if j["cat"] in ("IB", "PC"))
         summary["internships"] += sum(1 for j in keep if j["level"] == "Intern")
 
-    for k in ("newLeads", "replies", "newlySent", "bounces", "ibpcRoles", "internships", "firmsPulled"):
+    # Indeed: IB and credit roles at any employer (jobs/_open), merged with what the page already has
+    candidates = collections.OrderedDict()
+    if open_items:
+        prev = (d.jobs.get("_open") or {}).get("items") or []
+        fresh, seen_j = [], set()
+        for j in open_items:
+            k = job_key(j)
+            if not j["title"] or k in seen_j:
+                continue
+            seen_j.add(k)
+            cat, level = classify(j["title"], d.match_firm(j["company"]))
+            fresh.append({**j, "cat": cat, "level": level})
+        fresh.sort(key=posted_ts, reverse=True)
+        fresh = merge_seen(prev, fresh)
+        merged = fresh + [p for p in prev if job_key(p) not in seen_j]
+        emit("set", "jobs", "_open", {"pulledAt": now, "items": merged[:150]}, "_open" in d.jobs)
+        for j in fresh:
+            if j["cat"] not in ("IB", "PC"):
+                continue
+            m = d.match_firm(j["company"])
+            if m and m["on"]:
+                continue
+            nm = re.sub(r"\s+(LLC|L\.L\.C\.|Inc\.?|LP|L\.P\.)$", "", str(j["company"] or ""), flags=re.I).strip()
+            if not nm:
+                continue
+            key = m["id"] if m else "c-" + slug(nm)
+            cand = candidates.setdefault(key, {"name": m["name"] if m else nm, "firm_id": m["id"] if m else "", "roles": 0, "type": "PC" if j["cat"] == "PC" else ""})
+            cand["roles"] += 1
+
+    # Hiring firms go on the wish list (library firms now; others after the session resolves their websites)
+    job_firms = []
+    if d.profile.get("autoAddJobFirms", True) is not False:
+        for key, cand in list(candidates.items())[:MAX_JOB_FIRMS]:
+            if cand["firm_id"] and not cand["firm_id"].startswith("c-"):
+                t = d.targets.get(cand["firm_id"], {})
+                emit("set", "targets", cand["firm_id"], {**t, "on": True, "addedFrom": "jobs", "addedAt": now}, cand["firm_id"] in d.targets)
+                summary["firmsFromJobs"] += 1
+            elif key in d.targets and d.targets[key].get("domain"):
+                emit("set", "targets", key, {**d.targets[key], "on": True}, True)
+                summary["firmsFromJobs"] += 1
+            else:
+                job_firms.append({"id": key, "name": cand["name"], "type": cand["type"], "roles": cand["roles"]})
+    with open(os.path.join(work, "firm_candidates.json"), "w", encoding="utf-8") as f:
+        json.dump(job_firms, f, indent=1)
+
+    # Clay email verification: map looked-up people back to contacts, then read the Email data point
+    plan_path = os.path.join(work, "plan.json")
+    plan_doc = load_json_or_text(plan_path) if os.path.exists(plan_path) else {}
+    chunks = {v["chunk"]: v for v in (plan_doc.get("verify") or [])} if isinstance(plan_doc, dict) else {}
+    ent_to_cid = {}
+    for ch, data in lookups.items():
+        want = {norm_name(d.contacts.get(cid, {}).get("name")): cid for cid in chunks.get(ch, {}).get("contact_ids", [])}
+        for r in data.get("contacts") or []:
+            cid = want.get(norm_name(r.get("name")))
+            ent = str(r.get("entityId") or r.get("profile_id") or "")
+            if cid and ent:
+                ent_to_cid[(ch, ent)] = cid
+    found = {}
+    for ch, data in verifies:
+        for r in data.get("contacts") or data.get("entities") or data.get("results") or []:
+            ent = str(r.get("entityId") or r.get("profile_id") or r.get("id") or "")
+            cid = ent_to_cid.get((ch, ent))
+            if not cid:
+                continue
+            hits = [e for e in (r.get("enrichments") or []) if re.search(r"email", str(e.get("name") or e.get("type") or e.get("dataPointName") or e.get("title") or ""), re.I)]
+            c = d.contacts[cid]
+            f = d.firm_of(c)
+            emails = [e for e in emails_in(json.dumps([h.get("value") for h in hits])) if e not in (c.get("bounced") or [])]
+            best = next((e for e in emails if f and f.get("mail") and e.endswith("@" + f["mail"])), emails[0] if emails else "")
+            if best:
+                found[cid] = best
+    tried = {cid for ch, _ in verifies for cid in chunks.get(ch, {}).get("contact_ids", [])}
+    for cid in tried:
+        c = d.contacts.get(cid)
+        if not c:
+            continue
+        if cid in found:
+            patch_contact(cid, {"email": found[cid], "emailSrc": "clay", "verifyTried": now,
+                                "log": add_log(c, f"Clay verified {found[cid]} (daily update)", now)})
+            summary["verified"] += 1
+        else:
+            patch_contact(cid, {"verifyTried": now})
+            summary["verifyMissed"] += 1
+
+    for cid, patch in cpatch.items():
+        emit("update", "contacts", cid, patch, True)
+
+    for k in ("newLeads", "verified", "replies", "newlySent", "bounces", "newRoles", "ibpcRoles", "internships", "firmsPulled", "firmsFromJobs"):
         summary.setdefault(k, 0)
     emit("set", "config", "lastRun", {"at": now, "ok": True, "summary": dict(summary)}, "lastRun" in d.config)
     with open(os.path.join(work, "writes.json"), "w", encoding="utf-8") as f:
         json.dump(writes, f, indent=1)
-    return {"summary": dict(summary), "writes": len(writes), "existing_needing_version": sum(1 for w in writes if w["existing"])}
+    return {"summary": dict(summary), "writes": len(writes), "existing_needing_version": sum(1 for w in writes if w["existing"]),
+            "firm_candidates": job_firms}
+
+
+def add_job_firms(db_dir, work, domains_path):
+    """Adds the hiring firms the session resolved to websites. domains.json: {"Firm name": {"domain": "x.com", "type": "MM"}}."""
+    d, now = Desk(db_dir), now_ms()
+    cands = load_json_or_text(os.path.join(work, "firm_candidates.json"))
+    doms = load_json_or_text(domains_path) if os.path.exists(domains_path) else {}
+    with open(os.path.join(work, "writes.json"), encoding="utf-8") as f:
+        writes = json.load(f)
+    added = []
+    for cand in cands if isinstance(cands, list) else []:
+        info = doms.get(cand["name"]) if isinstance(doms, dict) else None
+        dom = str((info or {}).get("domain") or "").lower().strip()
+        dom = re.sub(r"^https?://", "", dom).removeprefix("www.").split("/")[0]
+        if not re.fullmatch(r"[a-z0-9.-]+\.[a-z]{2,}", dom):
+            continue
+        typ = (info or {}).get("type") or cand.get("type") or "MM"
+        if typ not in ("BB", "EB", "MM", "TX", "PC"):
+            typ = "MM"
+        if any(f["on"] and (f.get("domain") == dom or f.get("mail") == dom) for f in d.firms):
+            continue
+        body = {**d.targets.get(cand["id"], {}), "custom": True, "name": cand["name"][:80], "type": typ, "domain": dom, "mail": dom,
+                "pat": "first.last", "on": True, "addedFrom": "jobs", "addedAt": now, "m": [re.escape(cand["name"])],
+                "note": f"Added by the daily update: posting {cand['roles']} IB or credit role" + ("s" if cand["roles"] != 1 else "")}
+        fp = os.path.join(work, "writes", f"targets__{cand['id']}.json")
+        with open(fp, "w", encoding="utf-8") as f:
+            json.dump(body, f)
+        writes.append({"op": "set", "collection": "targets", "doc_id": cand["id"], "file_path": fp, "existing": cand["id"] in d.targets})
+        added.append(cand["name"])
+    lr = os.path.join(work, "writes", "config__lastRun.json")
+    if added and os.path.exists(lr):
+        with open(lr, encoding="utf-8") as f:
+            run = json.load(f)
+        run["summary"]["firmsFromJobs"] = run["summary"].get("firmsFromJobs", 0) + len(added)
+        run["summary"]["firmsAdded"] = added
+        with open(lr, "w", encoding="utf-8") as f:
+            json.dump(run, f)
+    with open(os.path.join(work, "writes.json"), "w", encoding="utf-8") as f:
+        json.dump(writes, f, indent=1)
+    return {"added": added, "writes": len(writes)}
 
 
 def main(argv):
@@ -523,6 +734,8 @@ def main(argv):
         print(json.dumps(plan(argv[2]), indent=1))
     elif len(argv) >= 4 and argv[1] == "apply":
         print(json.dumps(apply(argv[2], argv[3]), indent=1))
+    elif len(argv) >= 5 and argv[1] == "firms":
+        print(json.dumps(add_job_firms(argv[2], argv[3], argv[4]), indent=1))
     else:
         print(__doc__)
         return 2
