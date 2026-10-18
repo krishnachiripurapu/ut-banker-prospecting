@@ -240,6 +240,32 @@ details summary{cursor:pointer;color:var(--ink-2);font-size:12px;font-weight:600
 .mini-row{appearance:none;border:none;background:none;font:inherit;font-size:13px;color:var(--ink);display:flex;justify-content:space-between;gap:12px;padding:6px 8px;border-radius:var(--r);cursor:pointer;text-align:left;align-items:baseline;width:100%}
 .mini-row:hover,.mini-row.on{background:var(--sheet-2)}
 .mini-row.on{box-shadow:inset 3px 0 0 var(--accent)}
+/* Today: the daily checklist built from the desk */
+.td-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:12px}
+.td-prog{flex:0 1 300px;min-width:200px}
+.td-prog .meter{height:6px;margin-top:6px}
+.td-note{font-size:12px;color:var(--ink-2);margin:0 0 14px;display:flex;gap:6px 14px;flex-wrap:wrap}
+.td-note .warn{color:var(--warn)}
+.td-sec{margin-bottom:14px}
+.td-sec .card-h{padding-bottom:6px}
+.td-sec .card-h h3 .faint{font-weight:500;font-size:13px}
+.task{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:4px 10px;align-items:start;padding:10px 16px;border-top:1px solid var(--rule-2)}
+.task.hot{box-shadow:inset 3px 0 0 var(--crit)}
+.task.warn{box-shadow:inset 3px 0 0 var(--warn)}
+.task input[type=checkbox]{width:16px;height:16px;margin:2px 0 0;accent-color:var(--accent);cursor:pointer}
+.task .tt{font-weight:620;line-height:1.35;overflow-wrap:anywhere}
+.task .ts{font-size:12px;color:var(--ink-3);margin-top:2px;overflow-wrap:anywhere}
+.task .tn{display:flex;flex-wrap:wrap;gap:2px 12px;margin-top:6px;font-size:12px}
+.task .ta{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center}
+.task .mins{font-family:var(--f-mono);font-size:11px;color:var(--ink-3);white-space:nowrap}
+.task.done .tt{text-decoration:line-through;color:var(--ink-3)}
+.task.done .ta .btn:not([data-act="taskDel"]){display:none}
+.lnk{appearance:none;border:none;background:none;padding:0;font:inherit;color:var(--hard);cursor:pointer;text-align:left}
+.lnk:hover{text-decoration:underline}
+.td-add{display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--rule-2)}
+.td-add .in{flex:1 1 220px;width:auto}
+.td-add select.in{flex:0 0 auto}
+@media (max-width:640px){.task{grid-template-columns:20px minmax(0,1fr)}.task .ta{grid-column:2;justify-content:flex-start}}
 a.li{font-family:var(--f-mono);font-size:10px;font-weight:600;background:var(--hard);color:var(--sheet);border-radius:3px;padding:0 4px;text-decoration:none;vertical-align:1px}
 .mono-ta{font-family:var(--f-mono);font-size:12px;line-height:1.55}
 .grid-res{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
@@ -447,12 +473,16 @@ const EMAIL_RE_G = /[A-Z0-9._%+'-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 
 
 /* ---------- state ---------- */
-const TAB_IDS=["firms","people","outreach","jobs","resume","settings"];
+const TAB_IDS=["today","firms","people","outreach","jobs","resume","settings"];
+/* Local calendar day, e.g. 2026-10-18. The Today list and its check marks are kept per day. */
+function dayKeyOf(t=Date.now()){ const d=new Date(t); const p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
 const S = {
   db:null, mcp:null, sample:null, assets:null, downloads:null, perms:null, booted:false,
-  ready:{contacts:false,targets:false,apps:false,profile:false,jobs:false,resumes:false},
+  ready:{contacts:false,targets:false,apps:false,profile:false,jobs:false,resumes:false,tasks:false,day:false},
   contacts:{}, targets:{}, apps:{}, resumes:{}, profile:null, answers:null,
-  tab:(()=>{const h=(location.hash||"").slice(1); if(TAB_IDS.includes(h)) return h; const t=lsGet("cd.tab","firms"); return TAB_IDS.includes(t)?t:"firms";})(),
+  tasks:{}, day:null, dayKey:dayKeyOf(),
+  /* The first visit of each day opens on Today. */
+  tab:(()=>{ if(lsGet("cd.tabDay","")!==dayKeyOf()) return "today"; const h=(location.hash||"").slice(1); if(TAB_IDS.includes(h)) return h; const t=lsGet("cd.tab","today"); return TAB_IDS.includes(t)?t:"today";})(),
   open:null, kind:{}, drafts:{}, busy:{}, confirmDel:null, confirmBulkDel:false, sel:new Set(),
   batch:(()=>{const b=lsGet("cd.batch",[]);return Array.isArray(b)?b.filter(x=>x&&x.id&&typeof x.body==="string"):[];})(), o:{guesses:false},
   pfind:{scope:"alumni",running:false},
@@ -630,7 +660,7 @@ function nextAction(c,now=Date.now()){
 
 
 /* ---------- render: chrome ---------- */
-const TABS=[["firms","Firms"],["people","People"],["outreach","Outreach"],["jobs","Jobs"],["resume","Resumes"]];
+const TABS=[["today","Today"],["firms","Firms"],["people","People"],["outreach","Outreach"],["jobs","Jobs"],["resume","Resumes"]];
 const VERIFIED=["clay","replied","import","manual"];
 const isVerified = c => !!c.email && VERIFIED.includes(c.emailSrc);
 function emailStatus(c){ if(!c.email) return (c.bounced||[]).length?"Bounced":"None"; return isVerified(c)?"Verified":"Guessed"; }
@@ -646,7 +676,7 @@ function counts(){
   return {firms:on.length,people:cs.length,ver,gue,emailed,replied,roles:roles.length,fresh,due:dueList().length};
 }
 function renderTabs(){
-  const k=counts(); const badge={outreach:k.due,jobs:k.fresh};
+  const k=counts(); const plan=todayPlan(); const badge={today:plan?plan.open:0,outreach:k.due,jobs:k.fresh};
   $("#tabs").innerHTML=TABS.map(([id,l])=>`<button class="tab" role="tab" aria-selected="${S.tab===id}" data-act="tab" data-tab="${id}">${l}${badge[id]?`<span class="ct">${badge[id]}</span>`:""}</button>`).join("")
     +`<button class="tab gear" role="tab" aria-selected="${S.tab==="settings"}" data-act="tab" data-tab="settings">Settings</button>`;
   const steps=[["firms",k.firms,"firms"],["people",k.people,"people"],["people",k.ver,`verified emails${k.gue?`, ${k.gue} guessed`:""}`],["outreach",k.emailed,"emailed"],["outreach",k.replied,"replied"],["jobs",k.roles,`open roles${k.fresh?`, ${k.fresh} new`:""}`]];
@@ -659,8 +689,8 @@ function renderConns(){
 }
 let rq=0;
 function dataChanged(){ if(rq) return; rq=requestAnimationFrame(()=>{ rq=0; buildIndex(); renderTabs(); updateView(); renderDrawer(); }); }
-const VIEWS={firms:()=>[mountFirms,updateFirms],people:()=>[mountPeople,updatePeople],outreach:()=>[mountOutreach,updateOutreach],jobs:()=>[mountJobs,updateJobs],resume:()=>[mountResume,updateResume],settings:()=>[mountSetup,updateSetup]};
-function setTab(t){ if(!VIEWS[t]) t="firms"; S.tab=t; lsSet("cd.tab",t); try{history.replaceState(null,"","#"+t);}catch{} renderTabs(); mountView(); window.scrollTo(0,0); }
+const VIEWS={today:()=>[mountToday,updateToday],firms:()=>[mountFirms,updateFirms],people:()=>[mountPeople,updatePeople],outreach:()=>[mountOutreach,updateOutreach],jobs:()=>[mountJobs,updateJobs],resume:()=>[mountResume,updateResume],settings:()=>[mountSetup,updateSetup]};
+function setTab(t){ if(!VIEWS[t]) t="today"; S.tab=t; lsSet("cd.tab",t); lsSet("cd.tabDay",S.dayKey); try{history.replaceState(null,"","#"+t);}catch{} renderTabs(); mountView(); window.scrollTo(0,0); }
 function mountView(){ const m=$("#main"); m.innerHTML=banners()+`<div id="view"></div>`; VIEWS[S.tab]()[0](); updateView(); }
 function updateView(){ VIEWS[S.tab]()[1](); }
 function banners(){
@@ -676,6 +706,148 @@ function postingsUrl(f){ const p=P(); const yr=p.gradYear?Number(p.gradYear)-1:"
 function careersUrl(f){ return safeUrl(f.careers)||CAREERS[f.id]?.[0]||postingsUrl(f); }
 function firmNote(f){ return CAREERS[f.id]?.[1]||""; }
 function firmPeople(id){ return S.idx.byFirm[id]||[]; }
+
+/* ---------- Today: the daily task list ----------
+   Rebuilt from the desk on every change, so doing the work (sending, replying, applying) clears a task
+   by itself. Check marks are kept per day in days/<date>; your own tasks live in tasks/<id>. */
+const GMAIL_DRAFTS="https://mail.google.com/mail/u/0/#drafts";
+const OPEN_APP=["Watching","Open"], PREP_APP=["Online test","HireVue","Superday"];
+const TD_SECS=[["first","Do first"],["out","Outreach"],["jobs","Applications"],["setup","Set up"]];
+function fmtMins(m){ m=Math.round(m); if(m<60) return `${m} min`; const h=Math.floor(m/60), r=m%60; return r?`${h} h ${r} min`:`${h} h`; }
+function dayDone(){ return Array.isArray(S.day?.done)?S.day.done:[]; }
+function isChecked(key){ return dayDone().some(d=>d.k===key); }
+function resumeFor(a){ return Object.values(S.resumes).find(r=>(a.jobKey&&r.jobKey===a.jobKey)||(!a.jobKey&&r.firmId&&r.firmId===a.firmId)); }
+function todayPlan(){
+  if(!S.ready.contacts||!S.ready.profile) return null;
+  const p=P(), now=Date.now(), sod=startOfDay(), cs=Object.values(S.contacts), today=S.dayKey;
+  const firmName=c=>firmOf(c)?.name||c.firm||"";
+  const who=list=>list.slice(0,8).map(c=>({id:c.id,label:c.name||"(no name)"})), more=list=>Math.max(0,list.length-8);
+  const secs={first:[],out:[],jobs:[],setup:[],mine:[]};
+  const add=(sec,t)=>{ t.done=!!t.autoDone||isChecked(t.key); secs[sec].push(t); };
+
+  // Do first: people waiting on you, and interviews
+  for(const c of cs.filter(c=>c.stage==="replied").sort((a,b)=>(a.repliedAt||0)-(b.repliedAt||0)))
+    add("first",{key:"reply:"+c.id,sev:"hot",mins:5,title:`Reply to ${c.name} and set a time`,sub:[firmName(c),c.repliedAt?`replied ${ago(c.repliedAt)}`:""].filter(Boolean).join(" · "),acts:[{act:"open",label:"Open",data:{id:c.id}}]});
+  for(const c of cs.filter(c=>c.stage==="scheduled")){
+    if(!c.callAt) add("first",{key:"callset:"+c.id,sev:"hot",mins:3,title:`Set the call time with ${c.name}`,sub:firmName(c),acts:[{act:"open",label:"Open",data:{id:c.id}}]});
+    else if(c.callAt<now) add("first",{key:"calllog:"+c.id,sev:"hot",mins:3,title:`Log how the call with ${c.name} went`,sub:[firmName(c),fmtDT(c.callAt)].filter(Boolean).join(" · "),acts:[{act:"open",label:"Open",data:{id:c.id}}]});
+    else if(c.callAt<sod+2*DAY) add("first",{key:"callprep:"+c.id,sev:"hot",mins:15,title:`Prep for your call with ${c.name}`,sub:[firmName(c),fmtDT(c.callAt)].filter(Boolean).join(" · "),acts:[{act:"open",label:"Open",data:{id:c.id}}]});
+  }
+  const talked=cs.filter(c=>c.stage==="talked");
+  if(talked.length) add("first",{key:"thanks",sev:"hot",mins:3*talked.length,title:`Send ${talked.length} thank-you note${talked.length>1?"s":""}`,sub:"Within a day of each call.",who:who(talked),more:more(talked),acts:[{act:"writeThanks",label:"Write them"}]});
+  const apps=Object.values(S.apps);
+  for(const a of apps.filter(a=>PREP_APP.includes(a.status)))
+    add("first",{key:"prep:"+a.id,sev:"hot",mins:30,title:`Prepare for the ${a.status} with ${a.firm||"the firm"}`,sub:a.program||"",acts:[{act:"appEdit",label:"Notes",data:{id:a.id}}]});
+
+  // Applications you're tracking. Deadlines inside a week move up to Do first.
+  for(const a of apps.filter(a=>OPEN_APP.includes(a.status))){
+    const d=Date.parse(a.deadline)||0, soon=d&&d<now+7*DAY, near=d&&d<now+21*DAY;
+    if(a.status==="Watching"&&!near) continue;
+    const rz=resumeFor(a), acts=[];
+    if(safeUrl(a.url)) acts.push({href:a.url,label:"Posting"});
+    if(!rz) acts.push(a.jobKey?{act:"jobTailor",label:"Tailor resume",data:{key:a.jobKey}}:{act:"appTailor",label:"Tailor resume",data:{id:a.id}});
+    acts.push({act:"tdApplied",label:"Mark applied",data:{app:a.id}});
+    add(soon?"first":"jobs",{key:"apply:"+a.id,sev:soon?"hot":near?"warn":"",mins:rz?20:30,title:`Apply to ${a.program||"the program"} at ${a.firm||"the firm"}`,sub:[d?`due ${dueText(d)}`:"no deadline set",a.location,rz?"resume tailored":""].filter(Boolean).join(" · "),acts});
+  }
+
+  // Outreach
+  if(S.batch.length) add("out",{key:"batch",sev:"warn",mins:S.batch.length,title:`Review ${S.batch.length} written email${S.batch.length>1?"s":""} and save them to Gmail`,sub:"They're waiting on the Outreach tab.",acts:[{act:"tab",label:"Review",data:{tab:"outreach"}}]});
+  const drafted=cs.filter(c=>c.stage==="drafted");
+  if(drafted.length) add("out",{key:"drafts",sev:"warn",mins:drafted.length,title:`Send your ${drafted.length} Gmail draft${drafted.length>1?"s":""}`,sub:"Send them from Gmail, then press Check Gmail so the desk sees it.",who:who(drafted),more:more(drafted),acts:[{href:GMAIL_DRAFTS,label:"Gmail drafts"},{act:"sync",label:"Check Gmail"}]});
+  const fus=cs.filter(c=>["emailed","fu1"].includes(c.stage)).map(c=>({c,a:nextAction(c,now)})).filter(x=>x.a&&x.a.due<=now+DAY).sort((x,y)=>x.a.due-y.a.due);
+  if(fus.length) add("out",{key:"fu",sev:fus.some(x=>x.a.due<sod)?"warn":"",mins:fus.length,title:`Write ${fus.length} follow-up${fus.length>1?"s":""}`,sub:`No reply after ${p.followUpDays} days. They go in the same Gmail thread.`,who:who(fus.map(x=>x.c)),more:more(fus),acts:[{act:"writeFollowups",label:"Write them"}]});
+  const cap=Number(p.dailyCap)||20, sentToday=cs.filter(c=>(c.emailedAt>=sod)||(c.lastSentAt>=sod)).length;
+  const room=Math.max(0,cap-sentToday-S.batch.length), ready=readyList(S.o.guesses), readyAll=readyList(true);
+  if(sentToday>=cap) add("out",{key:"cold",autoDone:true,title:"Send today's cold emails",sub:`${sentToday} of ${cap} sent today. Goal met.`});
+  else if(ready.length&&room){ const n=Math.min(room,ready.length); add("out",{key:"cold",mins:2*n,title:`Write and send ${n} cold email${n>1?"s":""}`,sub:`${sentToday} of ${cap} sent today · ${ready.length} ${S.o.guesses?"people":"verified emails"} ready`,who:who(ready.slice(0,n)),more:Math.max(0,n-8),acts:[{act:"writeCold",label:`Write ${n}`,data:{n}}]}); }
+  else if(!ready.length&&readyAll.length&&room) add("out",{key:"cold",mins:2,title:"Pick who to email today",sub:`${readyAll.length} people have only a guessed email so far. Include guesses on Outreach, or wait for the morning run to verify them.`,acts:[{act:"tab",label:"Outreach",data:{tab:"outreach"}}]});
+  const closeable=cs.filter(c=>c.stage==="fu2"&&nextAction(c,now)?.due<=now);
+  if(closeable.length) add("out",{key:"close",mins:1,title:`Close out ${closeable.length} with no reply`,sub:"Two follow-ups and nothing back. This clears them off your list.",acts:[{act:"closeOut",label:"Close out"}]});
+  const checkins=cs.filter(c=>["thanked","advocate"].includes(c.stage)&&nextAction(c,now)?.due<=now);
+  if(checkins.length) add("out",{key:"checkin",mins:3*checkins.length,title:`Send ${checkins.length} check-in${checkins.length>1?"s":""}`,sub:"A short update to people you talked with about a month ago.",who:who(checkins),more:more(checkins),acts:[{act:"writeCheckins",label:"Write them"}]});
+
+  // New postings not tracked yet. Internships first, wish-list firms ahead of the rest.
+  const tracked=new Set(apps.map(a=>a.jobKey).filter(Boolean));
+  const fresh=allJobs().filter(j=>isNewJob(j)&&(j.cat==="IB"||j.cat==="PC")&&!tracked.has(j.key));
+  const onList=j=>firmById(j.firmId)?.on?1:0;
+  const interns=fresh.filter(j=>j.level==="Intern").sort((a,b)=>onList(b)-onList(a)||(b.firstSeen||0)-(a.firstSeen||0)).slice(0,6);
+  for(const j of interns){ const f=firmById(j.firmId), has=Object.values(S.resumes).some(r=>r.jobKey===j.key), acts=[];
+    if(safeUrl(j.url)) acts.push({href:j.url,label:"Posting"});
+    acts.push(has?{act:"tdTrack",label:"Track it",data:{key:j.key}}:{act:"jobTailor",label:"Tailor resume",data:{key:j.key}});
+    acts.push({act:"tdApplied",label:"Mark applied",data:{key:j.key}});
+    add("jobs",{key:"intern:"+hashKey(j.key),sev:"warn",mins:30,title:`Apply: ${j.title}`,sub:[f?.name||j.company,j.location,j.posted?`posted ${j.posted}`:""].filter(Boolean).join(" · "),acts}); }
+  const others=fresh.filter(j=>!interns.includes(j));
+  if(others.length){ const names=[...new Set(others.map(j=>firmById(j.firmId)?.name||j.company))];
+    add("jobs",{key:"newroles",mins:10,title:`Look over ${others.length} new IB and credit role${others.length>1?"s":""}`,sub:names.slice(0,5).join(", ")+(names.length>5?` and ${names.length-5} more`:""),acts:[{act:"tdGo",label:"See them",data:{tab:"jobs",jv:"new"}}]}); }
+
+  // One-time setup, shown only until it's done
+  if(!p.name) add("setup",{key:"name",mins:3,title:"Add your name and availability",sub:"Emails come out ready to send once these are in.",acts:[{act:"tab",label:"Settings",data:{tab:"settings"}}]});
+  if(S.ready.targets&&!FIRMS.some(f=>f.on)) add("setup",{key:"firms",mins:10,title:"Pick the firms for your wish list",acts:[{act:"tab",label:"Firms",data:{tab:"firms"}}]});
+  if(masterText().trim().length<200) add("setup",{key:"master",mins:20,title:"Build your master resume",sub:"Every tailored resume and answer starts from it.",acts:[{act:"tdGo",label:"Resumes",data:{tab:"resume",sub:"master"}}]});
+  if(!p.resume?.url) add("setup",{key:"attach",mins:2,title:"Attach a resume PDF to your cold emails",sub:"On Resumes, press Attach to cold emails.",acts:[{act:"tdGo",label:"Resumes",data:{tab:"resume",sub:"master"}}]});
+  if(readyAll.length<cap) add("setup",{key:"more",mins:5,title:"Add more bankers to email",sub:`Only ${readyAll.length} ${readyAll.length===1?"person is":"people are"} left to contact. The morning run adds more each day; you can also upload a list.`,acts:[{act:"addOpen",label:"Add people",data:{tabx:"csv"}}]});
+
+  // Your own tasks
+  const mine=Object.values(S.tasks).filter(t=>t&&t.text).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+  for(const t of mine){
+    if(t.repeat==="daily"){ add("mine",{key:"mine:"+t.id,cid:t.id,mine:true,title:t.text,sub:"Every day"}); continue; }
+    const due=t.due||today; if(due>today) continue;
+    if(t.doneAt&&dayKeyOf(t.doneAt)<today) continue;
+    add("mine",{key:"mine:"+t.id,cid:t.id,mine:true,oneoff:true,autoDone:!!t.doneAt,title:t.text,sub:due<today?`carried over from ${fmtDate(Date.parse(due+"T12:00"))}`:""});
+  }
+  const later=mine.filter(t=>t.repeat!=="daily"&&!t.doneAt&&(t.due||today)>today).sort((a,b)=>a.due<b.due?-1:1);
+  const list=Object.values(secs).flat(), left=list.filter(t=>!t.done);
+  return {secs,later,total:list.length,open:left.length,done:list.length-left.length,mins:left.reduce((s,t)=>s+(t.mins||0),0)};
+}
+function taskHTML(t){
+  const data=a=>Object.entries(a.data||{}).map(([k,v])=>`data-${k}="${esc(v)}"`).join(" ");
+  const acts=(t.acts||[]).map(a=>a.href?(safeUrl(a.href)?`<a class="btn sm ghost" href="${esc(safeUrl(a.href))}" target="_blank" rel="noopener">${esc(a.label)} ↗</a>`:""):`<button class="btn sm" data-act="${esc(a.act)}" ${data(a)}>${esc(a.label)}</button>`).join("");
+  const who=t.who?.length?`<div class="tn">${t.who.map(w=>`<button class="lnk" data-act="open" data-id="${esc(w.id)}">${esc(w.label)}</button>`).join("")}${t.more?`<span class="faint">and ${t.more} more</span>`:""}</div>`:"";
+  const lock=t.autoDone&&!t.oneoff;
+  return `<div class="task ${t.done?"done":t.sev||""}"><input type="checkbox" data-chg="taskDone" data-key="${esc(t.key)}" data-title="${esc(t.title)}"${t.cid?` data-cid="${esc(t.cid)}"`:""}${t.oneoff?` data-oneoff="1"`:""}${t.done?" checked":""}${lock?" disabled":""} aria-label="Done: ${esc(t.title)}">
+    <div><div class="tt">${esc(t.title)}</div>${t.sub?`<div class="ts">${esc(t.sub)}</div>`:""}${t.done?"":who}</div>
+    <div class="ta">${!t.done&&t.mins?`<span class="mins">${fmtMins(t.mins)}</span>`:""}${acts}${t.mine?`<button class="btn sm ghost" data-act="taskDel" data-id="${esc(t.cid)}" aria-label="Delete ${esc(t.title)}">✕</button>`:""}</div></div>`;
+}
+function mountToday(){
+  $("#view").innerHTML=`<div id="tdTop"></div><div id="tdSecs"></div>
+  <div class="card td-sec"><div class="card-h"><h3>My tasks <span class="faint" id="tdMineN"></span></h3><span class="hint" style="margin:0">Anything else on your plate. Daily ones come back every morning.</span></div>
+    <div id="tdMine"></div>
+    <div class="td-add"><input class="in" id="tdNew" maxlength="200" placeholder="Add a task, e.g. Practice DCF questions for 30 minutes" aria-label="New task"><select class="in" id="tdWhen" aria-label="When"><option value="today">Today</option><option value="tomorrow">Tomorrow</option><option value="daily">Every day</option></select><button class="btn" data-act="taskAdd">Add</button></div>
+    <div id="tdLater"></div></div>`;
+}
+function updateToday(){
+  const top=$("#tdTop"); if(!top) return;
+  const plan=todayPlan(), date=new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
+  if(!plan){ top.innerHTML=`<div class="td-head"><div><div class="eyebrow">${esc(date)}</div><h2>Today</h2></div></div>`; $("#tdSecs").innerHTML=`<div class="card td-sec">${'<div class="skel"></div>'.repeat(5)}</div>`; $("#tdMine").innerHTML=""; $("#tdLater").innerHTML=""; return; }
+  const pct=plan.total?Math.round(100*plan.done/plan.total):0;
+  const lr=S.lastRun, s=lr?.summary||{}, notes=[];
+  if(lr?.at&&Date.now()-lr.at<30*3600e3){
+    const bits=[[s.newLeads,"new people"],[s.verified,"emails verified"],[s.replies,"replies"],[s.newRoles,"new roles"]].filter(x=>x[0]).map(([n,l])=>`${n} ${l}`);
+    notes.push(`<span>Morning run ${esc(ago(lr.at))}${bits.length?": "+esc(bits.join(", ")):""}</span>`);
+    if(s.verifyBlocked) notes.push(`<span class="warn">Email checks are paused because Clay hit its plan limit (${esc(s.verifyBlocked)} waiting)</span>`);
+  } else if(lr?.at) notes.push(`<span class="warn">No morning run since ${esc(fmtDT(lr.at))}</span>`);
+  const head=plan.open?`${plan.open} thing${plan.open>1?"s":""} to do today`:plan.total?"All done for today":"Nothing due today";
+  top.innerHTML=`<div class="td-head"><div><div class="eyebrow">${esc(date)}</div><h2>${esc(head)}</h2><p class="muted lead-p">${plan.open&&plan.mins?`About ${fmtMins(plan.mins)} of work. `:""}Built from your desk each morning. Doing the work checks it off.</p></div>
+    <div class="td-prog"><div class="lbl" style="flex-direction:row;justify-content:space-between"><span>Done</span><span class="mono">${plan.done} of ${plan.total}</span></div><div class="meter"><i style="width:${pct}%"></i></div></div></div>${notes.length?`<p class="td-note">${notes.join("")}</p>`:""}`;
+  const secs=TD_SECS.map(([id,label])=>{ const items=plan.secs[id]; if(!items.length) return ""; const open=items.filter(t=>!t.done).length;
+    return `<div class="card td-sec"><div class="card-h"><h3>${label} <span class="faint">${open?`${open} open`:"done"}</span></h3></div><div>${items.map(taskHTML).join("")}</div></div>`; }).join("");
+  $("#tdSecs").innerHTML=secs||`<div class="card empty td-sec"><h3>Nothing due right now</h3><p>Replies, follow-ups and new job drops show up here as they come in.</p></div>`;
+  const mine=plan.secs.mine; $("#tdMineN").textContent=mine.length?`${mine.filter(t=>!t.done).length} open`:"";
+  $("#tdMine").innerHTML=mine.map(taskHTML).join("");
+  $("#tdLater").innerHTML=plan.later.length?`<div class="card-b" style="padding-top:10px"><div class="lbl">Later</div><div class="mini">${plan.later.map(t=>`<div class="mini-row" style="cursor:default"><span>${esc(t.text)}</span><span class="faint mono">${esc(fmtDate(Date.parse(t.due+"T12:00")))} <button class="lnk" data-act="taskDel" data-id="${esc(t.id)}" aria-label="Delete ${esc(t.text)}">✕</button></span></div>`).join("")}</div></div>`:"";
+}
+let dayPending=0, unDay=null;
+async function saveDay(patch){
+  if(!S.db){ toast(NO_DB,"warn"); dataChanged(); return; }
+  const key=S.dayKey, body={...(S.day||{}),...JSON.parse(JSON.stringify(patch)),day:key,at:Date.now()}; S.day=body; dataChanged();
+  dayPending++; try{ await enqueue("d:"+key,()=>S.db.doc("days/"+key).set(body)); }catch(e){ toast(dbErr(e),"crit"); } finally{ dayPending--; }
+}
+async function saveTask(id,patch){ if(!S.db){ toast(NO_DB,"warn"); dataChanged(); return; } const body={...(S.tasks[id]||{}),...JSON.parse(JSON.stringify(patch))}; delete body.id; S.tasks[id]={...body,id}; dataChanged(); return enqueue("tk:"+id,()=>S.db.collection("tasks").doc(id).set(body)).catch(e=>toast(dbErr(e),"crit")); }
+async function deleteTask(id){ if(!S.db) return toast(NO_DB,"warn"); delete S.tasks[id]; dataChanged(); return enqueue("tk:"+id,()=>S.db.collection("tasks").doc(id).delete()).catch(e=>toast(dbErr(e),"crit")); }
+function subDay(){ if(!S.db) return; try{ unDay?.(); }catch{} const key=S.dayKey;
+  unDay=S.db.doc("days/"+key).onSnapshot(d=>{ if(key!==S.dayKey||dayPending) return; S.day=d.exists?d.data():null; S.ready.day=true; dataChanged(); },()=>{ S.ready.day=true; }); }
+/* A page left open overnight rolls over to the new day. */
+setInterval(()=>{ const k=dayKeyOf(); if(k!==S.dayKey){ S.dayKey=k; S.day=null; subDay(); dataChanged(); } },60000);
 
 /* ---------- Step 1: Firms ---------- */
 const SIZES={s:["11-50"],m:["51-200"],l:["201-500","501-1,000"],xl:["1,001-5,000","5,001-10,000","10,001+"]};
@@ -917,7 +1089,7 @@ function updateOutreach(){
   main.innerHTML=html;
   const lr=S.lastRun, s=lr?.summary||{};
   const emailed=cs.filter(c=>c.emailedAt).length, replied=cs.filter(c=>c.repliedAt||["replied","scheduled","talked","thanked","advocate"].includes(c.stage)).length;
-  side.innerHTML=`<div class="card"><div class="card-h"><h3>Today</h3></div><div class="kpis">
+  side.innerHTML=`<div class="card"><div class="card-h"><h3>Sending today</h3></div><div class="kpis">
       <div class="kpi"><div class="v">${sentToday}<small> / ${p.dailyCap}</small></div><div class="l">Sent today</div><div class="meter"><i style="width:${Math.min(100,Math.round(100*sentToday/(p.dailyCap||20)))}%"></i></div></div>
       <div class="kpi"><div class="v">${emailed?Math.round(100*replied/emailed):0}<small>%</small></div><div class="l">Reply rate (${replied} of ${emailed})</div></div></div></div>
     ${lr?`<div class="card"><div class="card-h"><h3>Morning run</h3><span class="faint mono" style="font-size:11px">${esc(ago(lr.at))}</span></div><div class="card-b"><div class="legend">${[["New people",s.newLeads],["Emails verified",s.verified],["Replies",s.replies],["Newly sent",s.newlySent],["Bounces",s.bounces],["New roles",s.newRoles],["Firms added from jobs",s.firmsFromJobs]].filter(x=>x[1]!=null).map(([l,v])=>`<span>${l}</span><span class="mono">${v}</span>`).join("")}</div></div></div>`:""}
@@ -2087,6 +2259,8 @@ async function addFirmAndFind(name,from){
   else toast(`${f.name} added. Add its website with Edit so people search works.`,"warn");
 }
 function jobByKey(k){ return allJobs().find(x=>x.key===k)||null; }
+async function trackJob(key,status){ const j=jobByKey(key); if(!j){ toast("That posting isn't on the desk anymore.","warn"); return false; } const f=firmById(j.firmId);
+  await saveApp("j-"+hashKey(j.key),{firm:f?.name||j.company,firmId:j.firmId||"",program:j.title,location:j.location||"",url:safeUrl(j.url),jobKey:j.key,status,...(status==="Applied"?{appliedAt:Date.now()}:{})}); return true; }
 const ACT = {
   tab:el=>setTab(el.dataset.tab),
   open:(el,e)=>{ if(e.target.closest('[data-stop]')) return; e.preventDefault(); openContact(el.dataset.id); },
@@ -2134,6 +2308,14 @@ const ACT = {
   writeCold:el=>{ const n=Number(el.dataset.n)||0; const items=readyList(S.o.guesses).slice(0,n).map(c=>({id:c.id,kind:c.referrer?"referral":"cold"})); writeBatch(items); },
   writeFollowups:()=>{ const now=Date.now(); const items=Object.values(S.contacts).filter(c=>["emailed","fu1"].includes(c.stage)&&nextAction(c,now)?.due<=now+DAY).map(c=>({id:c.id,kind:c.stage==="emailed"?"fu1":"fu2"})); writeBatch(items); },
   writeThanks:()=>writeBatch(Object.values(S.contacts).filter(c=>c.stage==="talked").map(c=>({id:c.id,kind:"thanks"}))),
+  writeCheckins:()=>{ const now=Date.now(); writeBatch(Object.values(S.contacts).filter(c=>["thanked","advocate"].includes(c.stage)&&nextAction(c,now)?.due<=now).map(c=>({id:c.id,kind:"checkin"}))); },
+  taskAdd:()=>{ const el=$("#tdNew"); const text=(el?.value||"").trim(); if(!text) return toast("Type a task first.","warn"); const when=$("#tdWhen")?.value||"today";
+    const id="t-"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); el.value="";
+    saveTask(id,{text:text.slice(0,200),due:when==="daily"?null:when==="tomorrow"?dayKeyOf(Date.now()+DAY):S.dayKey,repeat:when==="daily"?"daily":"",doneAt:null,createdAt:Date.now()}); },
+  taskDel:el=>deleteTask(el.dataset.id),
+  tdGo:el=>{ if(el.dataset.sub) S.res.sub=el.dataset.sub; if(el.dataset.jv){ S.jobs.view=el.dataset.jv; S.jobs.firm=""; } setTab(el.dataset.tab); },
+  tdTrack:el=>trackJob(el.dataset.key,"Open"),
+  tdApplied:async el=>{ if(!S.db) return toast(NO_DB,"warn"); if(el.dataset.app) await saveApp(el.dataset.app,{status:"Applied",appliedAt:Date.now()}); else if(el.dataset.key){ if(!(await trackJob(el.dataset.key,"Applied"))) return; } toast("Marked applied. It's under Tracked on the Jobs tab.","ok"); },
   closeOut:async()=>{ const now=Date.now(); const list=Object.values(S.contacts).filter(c=>c.stage==="fu2"&&nextAction(c,now)?.due<=now); for(const c of list) await saveContact(c.id,{stage:"closed",log:addLog(c,"Closed after two follow-ups")}).catch(()=>{}); toast(`Closed ${list.length}.`,""); },
   batchSave:()=>saveBatch(),
   batchDiscard:()=>{ S.batch=[]; saveBatchLocal(); updateOutreach(); },
@@ -2236,7 +2418,11 @@ const CHG = {
   jFirm:el=>{ S.jobs.firm=el.value; updateJobs(); },
   jobStatus:async el=>{ const j=jobByKey(el.dataset.key); if(!j) return; const id="j-"+hashKey(j.key);
     if(!el.value){ if(S.apps[id]&&S.db){ delete S.apps[id]; dataChanged(); await S.db.collection("apps").doc(id).delete().catch(e=>toast(dbErr(e),"crit")); } return; }
-    const f=firmById(j.firmId); await saveApp(id,{firm:f?.name||j.company,firmId:j.firmId||"",program:j.title,location:j.location||"",url:safeUrl(j.url),jobKey:j.key,status:el.value,...(el.value==="Applied"?{appliedAt:Date.now()}:{})}); },
+    await trackJob(j.key,el.value); },
+  taskDone:el=>{ const key=el.dataset.key;
+    if(el.dataset.oneoff&&el.dataset.cid){ saveTask(el.dataset.cid,{doneAt:el.checked?Date.now():null}); return; }
+    const done=dayDone().filter(d=>d.k!==key); if(el.checked) done.push({k:key,t:Date.now(),title:String(el.dataset.title||"").slice(0,160)});
+    saveDay({done:done.slice(-300)}); },
   appStatus:el=>saveApp(el.dataset.id,{status:el.value,...(el.value==="Applied"?{appliedAt:Date.now()}:{})}),
   tjPick:el=>{ S.res.job=el.value; $("#tjPasteWrap").hidden=$("#tjPasteMeta").hidden=el.value!=="_paste"; updateTailor(); },
   rsTarget:el=>{ S.rs.target=el.value; },
@@ -2269,7 +2455,7 @@ document.addEventListener("input",e=>{ const el=e.target.closest("[data-inp]"); 
   if(t.dataset.bi!=null){ const it=S.batch[Number(t.dataset.bi)]; if(it){ it[t.dataset.bf]=t.value; saveBatchLocal(); } }
   const rse=t.closest("[data-rsedit]"); if(rse){ const l=S.rs.lines[Number(rse.dataset.rsedit)]; if(l){ l.edited=rse.value; rsPersist(); const fin=$("#rsFinal .final"); if(fin) fin.textContent=rsFinal(); } }
   const dft=t.closest("[data-draft]"); if(dft){ const id=dft.dataset.id; const k=S.kind[id]||"cold"; S.drafts[id+":"+k]={...(curDraft(id)||{kind:k,subject:"",body:""}),[dft.dataset.draft]:dft.value,kind:k}; } });
-document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ if(!$("#modal").hidden) closeModal(); else if(S.open) closeDrawer(); } if(e.key==="Enter"&&e.target.id==="fAddName"){ e.preventDefault(); ACT.firmQuickAdd(); } });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ if(!$("#modal").hidden) closeModal(); else if(S.open) closeDrawer(); } if(e.key==="Enter"&&e.target.id==="fAddName"){ e.preventDefault(); ACT.firmQuickAdd(); } if(e.key==="Enter"&&e.target.id==="tdNew"&&!e.isComposing){ e.preventDefault(); ACT.taskAdd(); } });
 document.getElementById("drawer").addEventListener("focusout",e=>{ if(S.drawerDirty&&!$("#drawer").contains(e.relatedTarget)) setTimeout(()=>renderDrawer(),0); });
 $("#modal").addEventListener("click",e=>{ if(e.target.id==="modal") closeModal(); });
 window.addEventListener("beforeunload",e=>{ if(S.res.masterDirty||S.res.tjDirty){ e.preventDefault(); e.returnValue=""; } });
@@ -2293,8 +2479,11 @@ function subscribe(){
   db.doc("config/answers").onSnapshot(d=>{ S.answers=d.exists?d.data():null; dataChanged(); },()=>{});
   db.doc("config/lastRun").onSnapshot(d=>{ S.lastRun=d.exists?d.data():null; dataChanged(); },()=>{});
   db.doc("config/resumeReview").onSnapshot(d=>{ if(d.exists&&!S.rs.running&&!S.rs.dirty){ const v=d.data(); S.rs.lines=Array.isArray(v.lines)?v.lines:[]; S.rs.overall=v.overall||null; S.rs.keywords=v.keywords||[]; S.rs.target=v.target||S.rs.target; dataChanged(); } },()=>{});
+  db.collection("tasks").onSnapshot(s=>{ const m={}; for(const d of s.docs) if(d.exists) m[d.id]={...d.data(),id:d.id}; S.tasks=m; S.ready.tasks=true; dataChanged(); },()=>{ S.ready.tasks=true; });
+  subDay();
 }
 async function boot(){
+  lsSet("cd.tab",S.tab); lsSet("cd.tabDay",S.dayKey);
   renderTabs(); renderConns(); mountView();
   const use=n=>(window.claude&&typeof window.claude.use==="function")?window.claude.use(n).catch(()=>null):Promise.resolve(null);
   const [db,mcp,sample,assets,downloads,perms]=await Promise.all(["db","mcp","sample","assets","downloads","permissions"].map(use));
