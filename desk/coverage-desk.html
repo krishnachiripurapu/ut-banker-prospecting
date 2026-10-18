@@ -265,6 +265,14 @@ details summary{cursor:pointer;color:var(--ink-2);font-size:12px;font-weight:600
 .td-add{display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--rule-2)}
 .td-add .in{flex:1 1 220px;width:auto}
 .td-add select.in{flex:0 0 auto}
+.task .tn .lnk{padding:4px 0}
+#tdLater .mini-row>span:first-child{min-width:0;overflow-wrap:anywhere}
+#tdLater .mini-row>span:last-child{flex:none;white-space:nowrap}
+#tdLater .lnk{padding:4px 8px}
+.td-cleared{margin:-4px 0 14px;font-size:12px;color:var(--ink-3)}
+.td-cleared summary{cursor:pointer}
+.td-cleared ul{margin:6px 0 0;padding-left:18px}
+.td-cleared li{text-decoration:line-through}
 @media (max-width:640px){.task{grid-template-columns:20px minmax(0,1fr)}.task .ta{grid-column:2;justify-content:flex-start}}
 a.li{font-family:var(--f-mono);font-size:10px;font-weight:600;background:var(--hard);color:var(--sheet);border-radius:3px;padding:0 4px;text-decoration:none;vertical-align:1px}
 .mono-ta{font-family:var(--f-mono);font-size:12px;line-height:1.55}
@@ -482,7 +490,7 @@ const S = {
   contacts:{}, targets:{}, apps:{}, resumes:{}, profile:null, answers:null,
   tasks:{}, day:null, dayKey:dayKeyOf(),
   /* The first visit of each day opens on Today. */
-  tab:(()=>{ if(lsGet("cd.tabDay","")!==dayKeyOf()) return "today"; const h=(location.hash||"").slice(1); if(TAB_IDS.includes(h)) return h; const t=lsGet("cd.tab","today"); return TAB_IDS.includes(t)?t:"today";})(),
+  tab:(()=>{ let canLS=true; try{ localStorage.getItem("cd.tab"); }catch{ canLS=false; } if(canLS&&lsGet("cd.tabDay","")!==dayKeyOf()) return "today"; const h=(location.hash||"").slice(1); if(TAB_IDS.includes(h)) return h; const t=lsGet("cd.tab","today"); return TAB_IDS.includes(t)?t:"today";})(),
   open:null, kind:{}, drafts:{}, busy:{}, confirmDel:null, confirmBulkDel:false, sel:new Set(),
   batch:(()=>{const b=lsGet("cd.batch",[]);return Array.isArray(b)?b.filter(x=>x&&x.id&&typeof x.body==="string"):[];})(), o:{guesses:false},
   pfind:{scope:"alumni",running:false},
@@ -595,7 +603,7 @@ async function saveContact(id,patch){
 }
 async function deleteContact(id){ if(!S.db) return toast(NO_DB,"warn"); delete S.contacts[id]; S.sel.delete(id); dataChanged(); return enqueue("c:"+id,()=>S.db.collection("contacts").doc(id).delete()).catch(e=>toast(dbErr(e),"crit")); }
 async function saveTarget(id,patch){ if(!S.db) return toast(NO_DB,"warn"); const cur=S.targets[id]||{}; const body={...cur,...JSON.parse(JSON.stringify(patch))}; S.targets[id]=body; rebuildFirms(); dataChanged(); return enqueue("t:"+id,()=>S.db.collection("targets").doc(id).set(body)).catch(e=>toast(dbErr(e),"crit")); }
-async function saveApp(id,patch){ if(!S.db) return toast(NO_DB,"warn"); const cur=S.apps[id]||{createdAt:Date.now()}; const body={...cur,...JSON.parse(JSON.stringify(patch))}; delete body.id; S.apps[id]={...body,id}; dataChanged(); return enqueue("a:"+id,()=>S.db.collection("apps").doc(id).set(body)).catch(e=>toast(dbErr(e),"crit")); }
+async function saveApp(id,patch){ if(!S.db){ toast(NO_DB,"warn"); return false; } const cur=S.apps[id]||{createdAt:Date.now()}; const body={...cur,...JSON.parse(JSON.stringify(patch))}; delete body.id; S.apps[id]={...body,id}; dataChanged(); return enqueue("a:"+id,()=>S.db.collection("apps").doc(id).set(body)).then(()=>true,e=>{toast(dbErr(e),"crit");return false;}); }
 async function saveProfile(patch){ if(!S.db) return toast(NO_DB,"warn"); const body={...P(),...JSON.parse(JSON.stringify(patch))}; S.profile=body; dataChanged(); return enqueue("profile",()=>S.db.doc("config/profile").set(body)).catch(e=>toast(dbErr(e),"crit")); }
 async function call(server,tool,input,opts){
   if(!S.mcp) throw {code:"no_mcp",message:"Connectors work when this page is open in Claude."};
@@ -635,9 +643,9 @@ async function askJSON(prompt,opts={}){ if(!S.sample) throw {code:"no_sample"}; 
 
 /* ---------- toasts / bulk ---------- */
 function toast(msg,kind="",link){ if(!msg) return; const el=document.createElement("div"); el.className="toast "+kind; el.innerHTML=`<span>${esc(msg)}</span>${safeUrl(link)?`<a href="${esc(link)}" target="_blank" rel="noopener">Open ↗</a>`:""}`; $("#toasts").append(el); setTimeout(()=>el.remove(), kind==="crit"?9000:5500); }
-function bulkStart(label,total){ S.bulk={label,total,done:0,stop:false,note:""}; renderBulk(); return S.bulk; }
+function bulkStart(label,total){ S.bulk={label,total,done:0,stop:false,note:""}; renderBulk(); if(S.tab==="today") updateToday(); return S.bulk; }
 function bulkStep(note){ if(!S.bulk) return; S.bulk.done++; if(note) S.bulk.note=note; renderBulk(); }
-function bulkEnd(msg){ S.bulk=null; renderBulk(); if(msg) toast(msg,"ok"); }
+function bulkEnd(msg){ S.bulk=null; renderBulk(); if(S.tab==="today") updateToday(); if(msg) toast(msg,"ok"); }
 function renderBulk(){ const el=$("#bulkbar"); const b=S.bulk; if(!b){ el.hidden=true; return; } el.hidden=false; const pct=b.total?Math.round(100*b.done/b.total):0;
   el.innerHTML=`<strong>${esc(b.label)}</strong><span class="mono">${b.done} / ${b.total}</span><div class="meter"><i style="width:${pct}%"></i></div><span class="faint" style="font-size:12px">${esc(b.note||"")}</span><button class="btn sm" data-act="bulkStop">${b.stop?"Stopping…":"Stop"}</button>`; }
 
@@ -653,7 +661,7 @@ function nextAction(c,now=Date.now()){
     case "replied": return {label:"Reply and set a time",due:c.repliedAt||now,sev:"hot",act:"open"};
     case "scheduled": return c.callAt && c.callAt<now ? {label:"Log how the call went",due:c.callAt,sev:"hot",act:"open"} : {label:"Prep for the call",due:c.callAt?c.callAt-DAY:now,sev:"hot",act:"prep"};
     case "talked": return {label:"Send a thank-you",due:c.talkedAt||now,sev:"crit",act:"compose",kind:"thanks"};
-    case "thanked": case "advocate": return {label:"Check in with an update",due:(c.thankedAt||c.talkedAt||now)+35*DAY,sev:"ok",act:"compose",kind:"checkin"};
+    case "thanked": case "advocate": return {label:"Check in with an update",due:(c.checkinAt||c.thankedAt||c.talkedAt||now)+35*DAY,sev:"ok",act:"compose",kind:"checkin"};
     default: return null;
   }
 }
@@ -691,7 +699,9 @@ let rq=0;
 function dataChanged(){ if(rq) return; rq=requestAnimationFrame(()=>{ rq=0; buildIndex(); renderTabs(); updateView(); renderDrawer(); }); }
 const VIEWS={today:()=>[mountToday,updateToday],firms:()=>[mountFirms,updateFirms],people:()=>[mountPeople,updatePeople],outreach:()=>[mountOutreach,updateOutreach],jobs:()=>[mountJobs,updateJobs],resume:()=>[mountResume,updateResume],settings:()=>[mountSetup,updateSetup]};
 function setTab(t){ if(!VIEWS[t]) t="today"; S.tab=t; lsSet("cd.tab",t); lsSet("cd.tabDay",S.dayKey); try{history.replaceState(null,"","#"+t);}catch{} renderTabs(); mountView(); window.scrollTo(0,0); }
-function mountView(){ const m=$("#main"); m.innerHTML=banners()+`<div id="view"></div>`; VIEWS[S.tab]()[0](); updateView(); }
+function mountView(){ const m=$("#main"), old=$("#tdNew"), keep=old&&{v:old.value,w:$("#tdWhen")?.value,f:document.activeElement===old};
+  m.innerHTML=banners()+`<div id="view"></div>`; VIEWS[S.tab]()[0](); updateView();
+  const n=$("#tdNew"); if(n&&keep){ n.value=keep.v; if(keep.w&&$("#tdWhen")) $("#tdWhen").value=keep.w; if(keep.f) n.focus(); } }
 function updateView(){ VIEWS[S.tab]()[1](); }
 function banners(){
   if(!S.booted) return "";
@@ -714,57 +724,81 @@ const GMAIL_DRAFTS="https://mail.google.com/mail/u/0/#drafts";
 const OPEN_APP=["Watching","Open"], PREP_APP=["Online test","HireVue","Superday"];
 const TD_SECS=[["first","Do first"],["out","Outreach"],["jobs","Applications"],["setup","Set up"]];
 function fmtMins(m){ m=Math.round(m); if(m<60) return `${m} min`; const h=Math.floor(m/60), r=m%60; return r?`${h} h ${r} min`:`${h} h`; }
+/* Dates typed into the app are calendar days. A deadline counts until the end of that day, local time. */
+function parseDay(s){ return /^\d{4}-\d{2}-\d{2}$/.test(s||"")?new Date(s+"T23:59").getTime():(Date.parse(s)||0); }
 function dayDone(){ return Array.isArray(S.day?.done)?S.day.done:[]; }
 function isChecked(key){ return dayDone().some(d=>d.k===key); }
 function resumeFor(a){ return Object.values(S.resumes).find(r=>(a.jobKey&&r.jobKey===a.jobKey)||(!a.jobKey&&r.firmId&&r.firmId===a.firmId)); }
+const inBatch=c=>S.batch.some(b=>b.id===c.id);
+const fuKind=c=>c.stage==="emailed"?"fu1":"fu2";
+/* A follow-up saved to Gmail but not sent yet. Gmail sync moves the stage once it goes out. */
+const fuPending=c=>c.lastDraft?.kind===fuKind(c)&&(c.lastDraft.at||0)>(c.lastSentAt||c.emailedAt||0);
+function fuDue(now=Date.now()){ return Object.values(S.contacts).filter(c=>["emailed","fu1"].includes(c.stage)&&!inBatch(c)&&!fuPending(c)).map(c=>({c,a:nextAction(c,now)})).filter(x=>x.a&&x.a.due<=now+DAY).sort((x,y)=>x.a.due-y.a.due); }
+function checkinsDue(now=Date.now()){ return Object.values(S.contacts).filter(c=>["thanked","advocate"].includes(c.stage)&&!inBatch(c)&&nextAction(c,now)?.due<=now); }
+/* Today's room under the daily cap: sent today, cold drafts saved today but not sent, and the review list all count. */
+function coldRoom(cs,sod){ const sent=cs.filter(c=>c.emailedAt>=sod||c.lastSentAt>=sod).length, unsent=cs.filter(c=>c.stage==="drafted"&&(c.draftedAt||0)>=sod).length;
+  return {sent,unsent,room:Math.max(0,(Number(P().dailyCap)||20)-sent-unsent-S.batch.length)}; }
+/* Tasks seen earlier today that the data has since cleared count as done. Kept per viewer in local storage. */
+function clearedToday(gen){
+  const k="cd.seen."+S.dayKey; let seen=lsGet(k,{}); if(!seen||typeof seen!=="object"||Array.isArray(seen)) seen={};
+  let changed=false; for(const t of gen) if(seen[t.key]!==t.title){ seen[t.key]=t.title; changed=true; }
+  if(changed){ lsSet(k,seen); try{ for(let i=localStorage.length-1;i>=0;i--){ const n=localStorage.key(i); if(n&&n.startsWith("cd.seen.")&&n!==k) localStorage.removeItem(n); } }catch{} }
+  const now=new Set(gen.map(t=>t.key)); return Object.entries(seen).filter(([key])=>!now.has(key)).map(([key,title])=>({key,title:String(title)}));
+}
 function todayPlan(){
-  if(!S.ready.contacts||!S.ready.profile) return null;
+  const R=S.ready; if(!R.contacts||!R.profile||!R.apps||!R.jobs||!R.targets||!R.resumes) return null;
   const p=P(), now=Date.now(), sod=startOfDay(), cs=Object.values(S.contacts), today=S.dayKey;
   const firmName=c=>firmOf(c)?.name||c.firm||"";
-  const who=list=>list.slice(0,8).map(c=>({id:c.id,label:c.name||"(no name)"})), more=list=>Math.max(0,list.length-8);
+  const who=list=>list.slice(0,8).map(c=>({id:c.id,label:c.name||"(no name)"})), more=list=>Math.max(0,list.length-8), ids=list=>list.map(c=>c.id);
   const secs={first:[],out:[],jobs:[],setup:[],mine:[]};
-  const add=(sec,t)=>{ t.done=!!t.autoDone||isChecked(t.key); secs[sec].push(t); };
+  /* A check on a grouped task covers the people in it at the time; someone new joining reopens it. */
+  const add=(sec,t)=>{ const rec=dayDone().find(d=>d.k===t.key); t.done=!!t.autoDone||(!!rec&&(!t.ids||!Array.isArray(rec.ids)||t.ids.every(id=>rec.ids.includes(id)))); secs[sec].push(t); };
 
   // Do first: people waiting on you, and interviews
   for(const c of cs.filter(c=>c.stage==="replied").sort((a,b)=>(a.repliedAt||0)-(b.repliedAt||0)))
-    add("first",{key:"reply:"+c.id,sev:"hot",mins:5,title:`Reply to ${c.name} and set a time`,sub:[firmName(c),c.repliedAt?`replied ${ago(c.repliedAt)}`:""].filter(Boolean).join(" · "),acts:[{act:"open",label:"Open",data:{id:c.id}}]});
+    add("first",{key:"reply:"+c.id,sev:"hot",mins:5,title:`Reply to ${c.name||"them"} and set a time`,sub:[firmName(c),c.repliedAt?`replied ${ago(c.repliedAt)}`:""].filter(Boolean).join(" · "),acts:[{act:"open",label:"Open",data:{id:c.id}}]});
   for(const c of cs.filter(c=>c.stage==="scheduled")){
-    if(!c.callAt) add("first",{key:"callset:"+c.id,sev:"hot",mins:3,title:`Set the call time with ${c.name}`,sub:firmName(c),acts:[{act:"open",label:"Open",data:{id:c.id}}]});
-    else if(c.callAt<now) add("first",{key:"calllog:"+c.id,sev:"hot",mins:3,title:`Log how the call with ${c.name} went`,sub:[firmName(c),fmtDT(c.callAt)].filter(Boolean).join(" · "),acts:[{act:"open",label:"Open",data:{id:c.id}}]});
-    else if(c.callAt<sod+2*DAY) add("first",{key:"callprep:"+c.id,sev:"hot",mins:15,title:`Prep for your call with ${c.name}`,sub:[firmName(c),fmtDT(c.callAt)].filter(Boolean).join(" · "),acts:[{act:"open",label:"Open",data:{id:c.id}}]});
+    if(!c.callAt) add("first",{key:"callset:"+c.id,sev:"hot",mins:3,title:`Set the call time with ${c.name||"them"}`,sub:firmName(c),acts:[{act:"open",label:"Open",data:{id:c.id}}]});
+    else if(c.callAt<now) add("first",{key:"calllog:"+c.id,sev:"hot",mins:3,title:`Log how the call with ${c.name||"them"} went`,sub:[firmName(c),fmtDT(c.callAt)].filter(Boolean).join(" · "),acts:[{act:"open",label:"Open",data:{id:c.id}}]});
+    else if(c.callAt<sod+2*DAY) add("first",{key:"callprep:"+c.id,sev:"hot",mins:15,title:`Prep for your call with ${c.name||"them"}`,sub:[firmName(c),fmtDT(c.callAt)].filter(Boolean).join(" · "),acts:[{act:"open",label:"Open",data:{id:c.id}}]});
   }
-  const talked=cs.filter(c=>c.stage==="talked");
-  if(talked.length) add("first",{key:"thanks",sev:"hot",mins:3*talked.length,title:`Send ${talked.length} thank-you note${talked.length>1?"s":""}`,sub:"Within a day of each call.",who:who(talked),more:more(talked),acts:[{act:"writeThanks",label:"Write them"}]});
+  const talked=cs.filter(c=>c.stage==="talked"&&!inBatch(c));
+  if(talked.length) add("first",{key:"thanks",sev:"hot",mins:3*talked.length,ids:ids(talked),title:`Send ${talked.length} thank-you note${talked.length>1?"s":""}`,sub:"Within a day of each call.",who:who(talked),more:more(talked),acts:[{act:"writeThanks",label:"Write them"}]});
   const apps=Object.values(S.apps);
   for(const a of apps.filter(a=>PREP_APP.includes(a.status)))
     add("first",{key:"prep:"+a.id,sev:"hot",mins:30,title:`Prepare for the ${a.status} with ${a.firm||"the firm"}`,sub:a.program||"",acts:[{act:"appEdit",label:"Notes",data:{id:a.id}}]});
 
   // Applications you're tracking. Deadlines inside a week move up to Do first.
   for(const a of apps.filter(a=>OPEN_APP.includes(a.status))){
-    const d=Date.parse(a.deadline)||0, soon=d&&d<now+7*DAY, near=d&&d<now+21*DAY;
-    if(a.status==="Watching"&&!near) continue;
-    const rz=resumeFor(a), acts=[];
+    const prog=a.program||"the program", firm=a.firm||"the firm";
+    const d=parseDay(a.deadline), opens=/^\d{4}-\d{2}-\d{2}$/.test(a.opens||"")?new Date(a.opens+"T00:00").getTime():0;
+    if(d&&d<now){ add("jobs",{key:"expired:"+a.id,mins:1,title:`Deadline passed for ${prog} at ${firm}`,sub:`It was ${fmtDate(d)}. Update its status.`,acts:[{act:"appEdit",label:"Update",data:{id:a.id}}]}); continue; }
+    if(a.status==="Watching"){
+      if(opens>now){ if(opens<sod+3*DAY) add("jobs",{key:"opens:"+a.id,mins:1,title:`${prog} at ${firm} opens ${dueText(opens)}`,sub:fmtDate(opens),acts:[{act:"appEdit",label:"Notes",data:{id:a.id}}]}); continue; }
+      if(!opens&&!(d&&d<now+21*DAY)) continue;
+    }
+    const soon=d&&d<now+7*DAY, near=d&&d<now+21*DAY, rz=resumeFor(a), acts=[];
     if(safeUrl(a.url)) acts.push({href:a.url,label:"Posting"});
     if(!rz) acts.push(a.jobKey?{act:"jobTailor",label:"Tailor resume",data:{key:a.jobKey}}:{act:"appTailor",label:"Tailor resume",data:{id:a.id}});
     acts.push({act:"tdApplied",label:"Mark applied",data:{app:a.id}});
-    add(soon?"first":"jobs",{key:"apply:"+a.id,sev:soon?"hot":near?"warn":"",mins:rz?20:30,title:`Apply to ${a.program||"the program"} at ${a.firm||"the firm"}`,sub:[d?`due ${dueText(d)}`:"no deadline set",a.location,rz?"resume tailored":""].filter(Boolean).join(" · "),acts});
+    add(soon?"first":"jobs",{key:"apply:"+a.id,sev:soon?"hot":near?"warn":"",mins:rz?20:30,title:`Apply to ${prog} at ${firm}`,sub:[d?`due ${dueText(d)}`:"no deadline set",a.location,rz?"resume tailored":""].filter(Boolean).join(" · "),acts});
   }
 
   // Outreach
-  if(S.batch.length) add("out",{key:"batch",sev:"warn",mins:S.batch.length,title:`Review ${S.batch.length} written email${S.batch.length>1?"s":""} and save them to Gmail`,sub:"They're waiting on the Outreach tab.",acts:[{act:"tab",label:"Review",data:{tab:"outreach"}}]});
-  const drafted=cs.filter(c=>c.stage==="drafted");
-  if(drafted.length) add("out",{key:"drafts",sev:"warn",mins:drafted.length,title:`Send your ${drafted.length} Gmail draft${drafted.length>1?"s":""}`,sub:"Send them from Gmail, then press Check Gmail so the desk sees it.",who:who(drafted),more:more(drafted),acts:[{href:GMAIL_DRAFTS,label:"Gmail drafts"},{act:"sync",label:"Check Gmail"}]});
-  const fus=cs.filter(c=>["emailed","fu1"].includes(c.stage)).map(c=>({c,a:nextAction(c,now)})).filter(x=>x.a&&x.a.due<=now+DAY).sort((x,y)=>x.a.due-y.a.due);
-  if(fus.length) add("out",{key:"fu",sev:fus.some(x=>x.a.due<sod)?"warn":"",mins:fus.length,title:`Write ${fus.length} follow-up${fus.length>1?"s":""}`,sub:`No reply after ${p.followUpDays} days. They go in the same Gmail thread.`,who:who(fus.map(x=>x.c)),more:more(fus),acts:[{act:"writeFollowups",label:"Write them"}]});
-  const cap=Number(p.dailyCap)||20, sentToday=cs.filter(c=>(c.emailedAt>=sod)||(c.lastSentAt>=sod)).length;
-  const room=Math.max(0,cap-sentToday-S.batch.length), ready=readyList(S.o.guesses), readyAll=readyList(true);
-  if(sentToday>=cap) add("out",{key:"cold",autoDone:true,title:"Send today's cold emails",sub:`${sentToday} of ${cap} sent today. Goal met.`});
-  else if(ready.length&&room){ const n=Math.min(room,ready.length); add("out",{key:"cold",mins:2*n,title:`Write and send ${n} cold email${n>1?"s":""}`,sub:`${sentToday} of ${cap} sent today · ${ready.length} ${S.o.guesses?"people":"verified emails"} ready`,who:who(ready.slice(0,n)),more:Math.max(0,n-8),acts:[{act:"writeCold",label:`Write ${n}`,data:{n}}]}); }
+  if(S.batch.length) add("out",{key:"batch",sev:"warn",mins:S.batch.length,ids:S.batch.map(b=>b.id),title:`Review ${S.batch.length} written email${S.batch.length>1?"s":""} and save them to Gmail`,sub:"They're waiting on the Outreach tab.",acts:[{act:"tab",label:"Review",data:{tab:"outreach"}}]});
+  const drafted=cs.filter(c=>!inBatch(c)&&(c.stage==="drafted"||(["emailed","fu1"].includes(c.stage)&&fuPending(c))||(["thanks","checkin"].includes(c.lastDraft?.kind)&&(c.lastDraft.at||0)>=sod)));
+  if(drafted.length) add("out",{key:"drafts",sev:"warn",mins:drafted.length,ids:ids(drafted),title:`Send your ${drafted.length} Gmail draft${drafted.length>1?"s":""}`,sub:"Send them from Gmail, then press Check Gmail so the desk sees it.",who:who(drafted),more:more(drafted),acts:[{href:GMAIL_DRAFTS,label:"Gmail drafts"},{act:"sync",label:"Check Gmail"}]});
+  const fus=fuDue(now);
+  if(fus.length) add("out",{key:"fu",sev:fus.some(x=>x.a.due<sod)?"warn":"",mins:fus.length,ids:fus.map(x=>x.c.id),title:`Write ${fus.length} follow-up${fus.length>1?"s":""}`,sub:`No reply after ${p.followUpDays} days. They go in the same Gmail thread.`,who:who(fus.map(x=>x.c)),more:more(fus),acts:[{act:"writeFollowups",label:"Write them"}]});
+  const cap=Number(p.dailyCap)||20, {sent,unsent,room}=coldRoom(cs,sod), ready=readyList(S.o.guesses), readyAll=readyList(true);
+  const sentLine=`${sent} of ${cap} sent today${unsent?`, ${unsent} waiting in Gmail drafts`:""}`;
+  if(sent>=cap) add("out",{key:"cold",autoDone:true,title:"Send today's cold emails",sub:`${sent} of ${cap} sent today. Goal met.`});
+  else if(ready.length&&room){ const n=Math.min(room,ready.length); add("out",{key:"cold",mins:2*n,title:`Write and send ${n} cold email${n>1?"s":""}`,sub:`${sentLine} · ${ready.length} ${S.o.guesses?"people":"verified emails"} ready`,who:who(ready.slice(0,n)),more:Math.max(0,n-8),acts:[{act:"writeCold",label:`Write ${n}`,data:{n}}]}); }
   else if(!ready.length&&readyAll.length&&room) add("out",{key:"cold",mins:2,title:"Pick who to email today",sub:`${readyAll.length} people have only a guessed email so far. Include guesses on Outreach, or wait for the morning run to verify them.`,acts:[{act:"tab",label:"Outreach",data:{tab:"outreach"}}]});
   const closeable=cs.filter(c=>c.stage==="fu2"&&nextAction(c,now)?.due<=now);
-  if(closeable.length) add("out",{key:"close",mins:1,title:`Close out ${closeable.length} with no reply`,sub:"Two follow-ups and nothing back. This clears them off your list.",acts:[{act:"closeOut",label:"Close out"}]});
-  const checkins=cs.filter(c=>["thanked","advocate"].includes(c.stage)&&nextAction(c,now)?.due<=now);
-  if(checkins.length) add("out",{key:"checkin",mins:3*checkins.length,title:`Send ${checkins.length} check-in${checkins.length>1?"s":""}`,sub:"A short update to people you talked with about a month ago.",who:who(checkins),more:more(checkins),acts:[{act:"writeCheckins",label:"Write them"}]});
+  if(closeable.length) add("out",{key:"close",mins:1,ids:ids(closeable),title:`Close out ${closeable.length} with no reply`,sub:"Two follow-ups and nothing back. This clears them off your list.",acts:[{act:"closeOut",label:"Close out"}]});
+  const checkins=checkinsDue(now);
+  if(checkins.length) add("out",{key:"checkin",mins:3*checkins.length,ids:ids(checkins),title:`Send ${checkins.length} check-in${checkins.length>1?"s":""}`,sub:"A short update to people you talked with about a month ago.",who:who(checkins),more:more(checkins),acts:[{act:"writeCheckins",label:"Write them"}]});
 
   // New postings not tracked yet. Internships first, wish-list firms ahead of the rest.
   const tracked=new Set(apps.map(a=>a.jobKey).filter(Boolean));
@@ -777,12 +811,12 @@ function todayPlan(){
     acts.push({act:"tdApplied",label:"Mark applied",data:{key:j.key}});
     add("jobs",{key:"intern:"+hashKey(j.key),sev:"warn",mins:30,title:`Apply: ${j.title}`,sub:[f?.name||j.company,j.location,j.posted?`posted ${j.posted}`:""].filter(Boolean).join(" · "),acts}); }
   const others=fresh.filter(j=>!interns.includes(j));
-  if(others.length){ const names=[...new Set(others.map(j=>firmById(j.firmId)?.name||j.company))];
-    add("jobs",{key:"newroles",mins:10,title:`Look over ${others.length} new IB and credit role${others.length>1?"s":""}`,sub:names.slice(0,5).join(", ")+(names.length>5?` and ${names.length-5} more`:""),acts:[{act:"tdGo",label:"See them",data:{tab:"jobs",jv:"new"}}]}); }
+  if(others.length){ const names=[...new Set(others.map(j=>firmById(j.firmId)?.name||j.company))], jids=others.map(j=>hashKey(j.key)), title=`Look over ${others.length} new IB and credit role${others.length>1?"s":""}`;
+    add("jobs",{key:"newroles",mins:10,ids:jids,title,sub:names.slice(0,5).join(", ")+(names.length>5?` and ${names.length-5} more`:""),acts:[{act:"tdGo",label:"See them",data:{tab:"jobs",jv:"new",tick:"newroles",title,ids:jids.join(",")}}]}); }
 
   // One-time setup, shown only until it's done
   if(!p.name) add("setup",{key:"name",mins:3,title:"Add your name and availability",sub:"Emails come out ready to send once these are in.",acts:[{act:"tab",label:"Settings",data:{tab:"settings"}}]});
-  if(S.ready.targets&&!FIRMS.some(f=>f.on)) add("setup",{key:"firms",mins:10,title:"Pick the firms for your wish list",acts:[{act:"tab",label:"Firms",data:{tab:"firms"}}]});
+  if(!FIRMS.some(f=>f.on)) add("setup",{key:"firms",mins:10,title:"Pick the firms for your wish list",acts:[{act:"tab",label:"Firms",data:{tab:"firms"}}]});
   if(masterText().trim().length<200) add("setup",{key:"master",mins:20,title:"Build your master resume",sub:"Every tailored resume and answer starts from it.",acts:[{act:"tdGo",label:"Resumes",data:{tab:"resume",sub:"master"}}]});
   if(!p.resume?.url) add("setup",{key:"attach",mins:2,title:"Attach a resume PDF to your cold emails",sub:"On Resumes, press Attach to cold emails.",acts:[{act:"tdGo",label:"Resumes",data:{tab:"resume",sub:"master"}}]});
   if(readyAll.length<cap) add("setup",{key:"more",mins:5,title:"Add more bankers to email",sub:`Only ${readyAll.length} ${readyAll.length===1?"person is":"people are"} left to contact. The morning run adds more each day; you can also upload a list.`,acts:[{act:"addOpen",label:"Add people",data:{tabx:"csv"}}]});
@@ -793,18 +827,20 @@ function todayPlan(){
     if(t.repeat==="daily"){ add("mine",{key:"mine:"+t.id,cid:t.id,mine:true,title:t.text,sub:"Every day"}); continue; }
     const due=t.due||today; if(due>today) continue;
     if(t.doneAt&&dayKeyOf(t.doneAt)<today) continue;
-    add("mine",{key:"mine:"+t.id,cid:t.id,mine:true,oneoff:true,autoDone:!!t.doneAt,title:t.text,sub:due<today?`carried over from ${fmtDate(Date.parse(due+"T12:00"))}`:""});
+    add("mine",{key:"mine:"+t.id,cid:t.id,mine:true,oneoff:true,autoDone:!!t.doneAt,title:t.text,sub:due<today?`carried over from ${fmtDate(parseDay(due))}`:""});
   }
   const later=mine.filter(t=>t.repeat!=="daily"&&!t.doneAt&&(t.due||today)>today).sort((a,b)=>a.due<b.due?-1:1);
-  const list=Object.values(secs).flat(), left=list.filter(t=>!t.done);
-  return {secs,later,total:list.length,open:left.length,done:list.length-left.length,mins:left.reduce((s,t)=>s+(t.mins||0),0)};
+  const gen=[...secs.first,...secs.out,...secs.jobs,...secs.setup], cleared=clearedToday(gen);
+  const list=[...gen,...secs.mine], left=list.filter(t=>!t.done);
+  return {secs,later,cleared,total:list.length+cleared.length,open:left.length,done:list.length-left.length+cleared.length,mins:left.reduce((s,t)=>s+(t.mins||0),0)};
 }
 function taskHTML(t){
   const data=a=>Object.entries(a.data||{}).map(([k,v])=>`data-${k}="${esc(v)}"`).join(" ");
-  const acts=(t.acts||[]).map(a=>a.href?(safeUrl(a.href)?`<a class="btn sm ghost" href="${esc(safeUrl(a.href))}" target="_blank" rel="noopener">${esc(a.label)} ↗</a>`:""):`<button class="btn sm" data-act="${esc(a.act)}" ${data(a)}>${esc(a.label)}</button>`).join("");
+  const busy=!!S.bulk, dayLock=!t.oneoff&&S.db&&!S.ready.day;
+  const acts=(t.acts||[]).map(a=>a.href?(safeUrl(a.href)?`<a class="btn sm ghost" href="${esc(safeUrl(a.href))}" target="_blank" rel="noopener" aria-label="${esc(a.label)}: ${esc(t.title)} (opens in a new tab)">${esc(a.label)} ↗</a>`:""):`<button class="btn sm" data-act="${esc(a.act)}" ${data(a)} aria-label="${esc(a.label)}: ${esc(t.title)}"${busy&&/^write/.test(a.act)?" disabled":""}>${esc(a.label)}</button>`).join("");
   const who=t.who?.length?`<div class="tn">${t.who.map(w=>`<button class="lnk" data-act="open" data-id="${esc(w.id)}">${esc(w.label)}</button>`).join("")}${t.more?`<span class="faint">and ${t.more} more</span>`:""}</div>`:"";
-  const lock=t.autoDone&&!t.oneoff;
-  return `<div class="task ${t.done?"done":t.sev||""}"><input type="checkbox" data-chg="taskDone" data-key="${esc(t.key)}" data-title="${esc(t.title)}"${t.cid?` data-cid="${esc(t.cid)}"`:""}${t.oneoff?` data-oneoff="1"`:""}${t.done?" checked":""}${lock?" disabled":""} aria-label="Done: ${esc(t.title)}">
+  const lock=(t.autoDone&&!t.oneoff)||dayLock;
+  return `<div class="task ${t.done?"done":t.sev||""}"><input type="checkbox" data-chg="taskDone" data-key="${esc(t.key)}" data-title="${esc(t.title)}"${t.ids?` data-ids="${esc(t.ids.join(","))}"`:""}${t.cid?` data-cid="${esc(t.cid)}"`:""}${t.oneoff?` data-oneoff="1"`:""}${t.done?" checked":""}${lock?" disabled":""} aria-label="Done: ${esc(t.title)}">
     <div><div class="tt">${esc(t.title)}</div>${t.sub?`<div class="ts">${esc(t.sub)}</div>`:""}${t.done?"":who}</div>
     <div class="ta">${!t.done&&t.mins?`<span class="mins">${fmtMins(t.mins)}</span>`:""}${acts}${t.mine?`<button class="btn sm ghost" data-act="taskDel" data-id="${esc(t.cid)}" aria-label="Delete ${esc(t.title)}">✕</button>`:""}</div></div>`;
 }
@@ -815,7 +851,17 @@ function mountToday(){
     <div class="td-add"><input class="in" id="tdNew" maxlength="200" placeholder="Add a task, e.g. Practice DCF questions for 30 minutes" aria-label="New task"><select class="in" id="tdWhen" aria-label="When"><option value="today">Today</option><option value="tomorrow">Tomorrow</option><option value="daily">Every day</option></select><button class="btn" data-act="taskAdd">Add</button></div>
     <div id="tdLater"></div></div>`;
 }
+/* Re-rendering replaces the rows, so put keyboard focus back on the same control afterwards. */
 function updateToday(){
+  const v=$("#view"), ae=document.activeElement; let sel=null;
+  if(v&&ae&&v.contains(ae)&&!["tdNew","tdWhen"].includes(ae.id)&&ae!==document.body){
+    if(ae.dataset.chg==="taskDone") sel=`[data-chg="taskDone"][data-key="${CSS.escape(ae.dataset.key)}"]`;
+    else if(ae.dataset.act) sel=[...ae.attributes].filter(x=>x.name.startsWith("data-")).map(x=>`[${x.name}="${CSS.escape(x.value)}"]`).join("");
+  }
+  renderToday();
+  if(sel&&v&&!v.contains(document.activeElement)) v.querySelector(sel)?.focus({preventScroll:true});
+}
+function renderToday(){
   const top=$("#tdTop"); if(!top) return;
   const plan=todayPlan(), date=new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
   if(!plan){ top.innerHTML=`<div class="td-head"><div><div class="eyebrow">${esc(date)}</div><h2>Today</h2></div></div>`; $("#tdSecs").innerHTML=`<div class="card td-sec">${'<div class="skel"></div>'.repeat(5)}</div>`; $("#tdMine").innerHTML=""; $("#tdLater").innerHTML=""; return; }
@@ -827,27 +873,30 @@ function updateToday(){
     if(s.verifyBlocked) notes.push(`<span class="warn">Email checks are paused because Clay hit its plan limit (${esc(s.verifyBlocked)} waiting)</span>`);
   } else if(lr?.at) notes.push(`<span class="warn">No morning run since ${esc(fmtDT(lr.at))}</span>`);
   const head=plan.open?`${plan.open} thing${plan.open>1?"s":""} to do today`:plan.total?"All done for today":"Nothing due today";
-  top.innerHTML=`<div class="td-head"><div><div class="eyebrow">${esc(date)}</div><h2>${esc(head)}</h2><p class="muted lead-p">${plan.open&&plan.mins?`About ${fmtMins(plan.mins)} of work. `:""}Built from your desk each morning. Doing the work checks it off.</p></div>
+  top.innerHTML=`<div class="td-head"><div><div class="eyebrow">${esc(date)}</div><h2>${esc(head)}</h2><p class="muted lead-p">${plan.open&&plan.mins?`About ${fmtMins(plan.mins)} of work. `:""}Most tasks clear themselves as you do the work. Tick off the rest.</p></div>
     <div class="td-prog"><div class="lbl" style="flex-direction:row;justify-content:space-between"><span>Done</span><span class="mono">${plan.done} of ${plan.total}</span></div><div class="meter"><i style="width:${pct}%"></i></div></div></div>${notes.length?`<p class="td-note">${notes.join("")}</p>`:""}`;
   const secs=TD_SECS.map(([id,label])=>{ const items=plan.secs[id]; if(!items.length) return ""; const open=items.filter(t=>!t.done).length;
     return `<div class="card td-sec"><div class="card-h"><h3>${label} <span class="faint">${open?`${open} open`:"done"}</span></h3></div><div>${items.map(taskHTML).join("")}</div></div>`; }).join("");
-  $("#tdSecs").innerHTML=secs||`<div class="card empty td-sec"><h3>Nothing due right now</h3><p>Replies, follow-ups and new job drops show up here as they come in.</p></div>`;
+  const cleared=plan.cleared.length?`<details class="td-cleared"><summary>Cleared today: ${plan.cleared.length}</summary><ul>${plan.cleared.map(c=>`<li>${esc(c.title)}</li>`).join("")}</ul></details>`:"";
+  $("#tdSecs").innerHTML=(secs||`<div class="card empty td-sec"><h3>Nothing due right now</h3><p>Replies, follow-ups and new job drops show up here as they come in.</p></div>`)+cleared;
   const mine=plan.secs.mine; $("#tdMineN").textContent=mine.length?`${mine.filter(t=>!t.done).length} open`:"";
   $("#tdMine").innerHTML=mine.map(taskHTML).join("");
-  $("#tdLater").innerHTML=plan.later.length?`<div class="card-b" style="padding-top:10px"><div class="lbl">Later</div><div class="mini">${plan.later.map(t=>`<div class="mini-row" style="cursor:default"><span>${esc(t.text)}</span><span class="faint mono">${esc(fmtDate(Date.parse(t.due+"T12:00")))} <button class="lnk" data-act="taskDel" data-id="${esc(t.id)}" aria-label="Delete ${esc(t.text)}">✕</button></span></div>`).join("")}</div></div>`:"";
+  $("#tdLater").innerHTML=plan.later.length?`<div class="card-b" style="padding-top:10px"><div class="lbl">Later</div><div class="mini">${plan.later.map(t=>`<div class="mini-row" style="cursor:default"><span>${esc(t.text)}</span><span class="faint mono">${esc(fmtDate(parseDay(t.due)))} <button class="lnk" data-act="taskDel" data-id="${esc(t.id)}" aria-label="Delete ${esc(t.text)}">✕</button></span></div>`).join("")}</div></div>`:"";
 }
-let dayPending=0, unDay=null;
+let unDay=null;
 async function saveDay(patch){
   if(!S.db){ toast(NO_DB,"warn"); dataChanged(); return; }
+  if(!S.ready.day){ toast("Still loading today's check marks. Try again in a moment.","warn"); dataChanged(); return; }
   const key=S.dayKey, body={...(S.day||{}),...JSON.parse(JSON.stringify(patch)),day:key,at:Date.now()}; S.day=body; dataChanged();
-  dayPending++; try{ await enqueue("d:"+key,()=>S.db.doc("days/"+key).set(body)); }catch(e){ toast(dbErr(e),"crit"); } finally{ dayPending--; }
+  /* Own writes come back through the snapshot right away, so no extra guard is needed here. */
+  try{ await enqueue("d:"+key,()=>S.db.doc("days/"+key).set(body)); }catch(e){ toast(dbErr(e),"crit"); }
 }
 async function saveTask(id,patch){ if(!S.db){ toast(NO_DB,"warn"); dataChanged(); return; } const body={...(S.tasks[id]||{}),...JSON.parse(JSON.stringify(patch))}; delete body.id; S.tasks[id]={...body,id}; dataChanged(); return enqueue("tk:"+id,()=>S.db.collection("tasks").doc(id).set(body)).catch(e=>toast(dbErr(e),"crit")); }
 async function deleteTask(id){ if(!S.db) return toast(NO_DB,"warn"); delete S.tasks[id]; dataChanged(); return enqueue("tk:"+id,()=>S.db.collection("tasks").doc(id).delete()).catch(e=>toast(dbErr(e),"crit")); }
 function subDay(){ if(!S.db) return; try{ unDay?.(); }catch{} const key=S.dayKey;
-  unDay=S.db.doc("days/"+key).onSnapshot(d=>{ if(key!==S.dayKey||dayPending) return; S.day=d.exists?d.data():null; S.ready.day=true; dataChanged(); },()=>{ S.ready.day=true; }); }
+  unDay=S.db.doc("days/"+key).onSnapshot(d=>{ if(key!==S.dayKey) return; if(!d.exists&&d.metadata?.fromCache) return; S.day=d.exists?d.data():null; S.ready.day=true; dataChanged(); },()=>{ toast("Couldn't load today's check marks. Reload the page.","warn"); }); }
 /* A page left open overnight rolls over to the new day. */
-setInterval(()=>{ const k=dayKeyOf(); if(k!==S.dayKey){ S.dayKey=k; S.day=null; subDay(); dataChanged(); } },60000);
+setInterval(()=>{ const k=dayKeyOf(); if(k!==S.dayKey){ S.dayKey=k; S.day=null; if(S.db) S.ready.day=false; subDay(); dataChanged(); } },60000);
 
 /* ---------- Step 1: Firms ---------- */
 const SIZES={s:["11-50"],m:["51-200"],l:["201-500","501-1,000"],xl:["1,001-5,000","5,001-10,000","10,001+"]};
@@ -1068,8 +1117,7 @@ function updateOutreach(){
       <p class="hint" style="margin:0">${p.resume?.url?`Your resume (${esc(p.resume.name||"PDF")}) attaches to each first email.`:"No resume attaches yet. On the Resumes tab, press Attach to cold emails."}</p></div></div>`;
   }
   const ready=readyList(S.o.guesses), readyAll=readyList(true);
-  const sentToday=cs.filter(c=>(c.emailedAt>=sod)||(c.lastSentAt>=sod)).length;
-  const room=Math.max(0,(Number(p.dailyCap)||20)-sentToday-S.batch.length);
+  const {sent:sentToday,room}=coldRoom(cs,sod);
   const nCold=Math.min(ready.length,room||0);
   html+=`<div class="card"><div class="card-h"><div><div class="eyebrow">Cold emails</div><h3>${ready.length} ready${!S.o.guesses&&readyAll.length>ready.length?` · ${readyAll.length-ready.length} more with guessed emails`:""}</h3></div>
     <div class="btn-row"><button class="btn primary" data-act="writeCold" data-n="${nCold}" ${nCold&&!S.bulk?"":"disabled"}>Write ${nCold||""} email${nCold===1?"":"s"}</button></div></div>
@@ -1077,7 +1125,7 @@ function updateOutreach(){
     <p class="hint">${room?`${room} more today before your daily limit of ${p.dailyCap}.`:`You've hit today's limit of ${p.dailyCap}. Change it in Settings.`} Each email is written from the person's profile in your 5-sentence format.</p>
     ${ready.length?`<div class="mini">${ready.slice(0,8).map(c=>`<button class="mini-row" data-act="open" data-id="${esc(c.id)}"><span>${esc(c.name)}</span><span class="faint">${esc(firmOf(c)?.name||c.firm||"")}</span></button>`).join("")}${ready.length>8?`<span class="faint" style="font-size:12px">and ${ready.length-8} more</span>`:""}</div>`:`<p class="muted" style="margin:6px 0 0;font-size:13px">${readyAll.length?"Verify emails on the People tab, or include guesses.":"Find people or add a list on the People tab."}</p>`}</div></div>`;
   // follow-ups
-  const fus=cs.filter(c=>["emailed","fu1"].includes(c.stage)).map(c=>({c,a:nextAction(c,now)})).filter(x=>x.a&&x.a.due<=now+DAY).sort((x,y)=>x.a.due-y.a.due);
+  const fus=fuDue(now);
   const done=cs.filter(c=>c.stage==="fu2"&&nextAction(c,now)?.due<=now);
   html+=`<div class="card"><div class="card-h"><div><div class="eyebrow">Follow-ups</div><h3>${fus.length?`${fus.length} due`:"None due"}</h3></div><div class="btn-row">${fus.length?`<button class="btn" data-act="writeFollowups" ${S.bulk?"disabled":""}>Write ${fus.length} follow-up${fus.length>1?"s":""}</button>`:""}${done.length?`<button class="btn ghost" data-act="closeOut">Close out ${done.length} with no reply</button>`:""}</div></div>
     <div class="card-b">${fus.length?`<div class="mini">${fus.slice(0,10).map(x=>`<button class="mini-row" data-act="open" data-id="${esc(x.c.id)}"><span>${esc(x.c.name)}</span><span class="faint mono">${esc(x.a.kind==="fu2"?"final nudge":"follow-up")} · ${tPlus(x.c.emailedAt)}</span></button>`).join("")}</div>`:`<p class="muted" style="margin:0;font-size:13px">Follow-ups come due ${p.followUpDays} days after each email with no reply. They go in the same Gmail thread.</p>`}</div></div>`;
@@ -1092,13 +1140,14 @@ function updateOutreach(){
   side.innerHTML=`<div class="card"><div class="card-h"><h3>Sending today</h3></div><div class="kpis">
       <div class="kpi"><div class="v">${sentToday}<small> / ${p.dailyCap}</small></div><div class="l">Sent today</div><div class="meter"><i style="width:${Math.min(100,Math.round(100*sentToday/(p.dailyCap||20)))}%"></i></div></div>
       <div class="kpi"><div class="v">${emailed?Math.round(100*replied/emailed):0}<small>%</small></div><div class="l">Reply rate (${replied} of ${emailed})</div></div></div></div>
-    ${lr?`<div class="card"><div class="card-h"><h3>Morning run</h3><span class="faint mono" style="font-size:11px">${esc(ago(lr.at))}</span></div><div class="card-b"><div class="legend">${[["New people",s.newLeads],["Emails verified",s.verified],["Replies",s.replies],["Newly sent",s.newlySent],["Bounces",s.bounces],["New roles",s.newRoles],["Firms added from jobs",s.firmsFromJobs]].filter(x=>x[1]!=null).map(([l,v])=>`<span>${l}</span><span class="mono">${v}</span>`).join("")}</div></div></div>`:""}
+    ${lr?`<div class="card"><div class="card-h"><h3>Morning run</h3><span class="faint mono" style="font-size:11px">${esc(ago(lr.at))}</span></div><div class="card-b"><div class="legend">${[["New people",s.newLeads],["Emails verified",s.verified],["Replies",s.replies],["Newly sent",s.newlySent],["Bounces",s.bounces],["New roles",s.newRoles],["Firms added from jobs",s.firmsFromJobs]].filter(x=>x[1]!=null).map(([l,v])=>`<span>${l}</span><span class="mono">${esc(v)}</span>`).join("")}</div></div></div>`:""}
     <div class="card"><div class="card-h"><h3>Add bankers</h3></div><div class="card-b stack" style="gap:8px;font-size:13px">
       <button class="btn" data-act="addOpen" data-tabx="csv">Upload a CSV</button><button class="btn" data-act="addOpen" data-tabx="one">Add one person</button><button class="btn" data-act="addOpen" data-tabx="profile">Paste a LinkedIn profile</button>
       <p class="hint" style="margin:0">New people land on the People tab with an email guess, then show up here once verified.</p></div></div>`;
 }
 async function writeBatch(items){
   if(!P().name) return toast("Add your name in Settings first.","warn");
+  if(S.bulk) return toast("Wait for the current batch to finish.","warn");
   if(!items.length) return;
   const b=bulkStart("Writing emails",items.length); let n=0;
   for(const it of items){ if(b.stop) break;
@@ -1176,12 +1225,12 @@ function updateJobs(){
   const w=$("#jWatch"); if(w) w.innerHTML=on.length?`<div class="stack" style="gap:0">${on.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(f=>`<div style="padding:8px 0;border-top:1px solid var(--rule-2)"><a class="nm" href="${esc(careersUrl(f))}" target="_blank" rel="noopener">${esc(f.name)} ↗</a>${firmNote(f)?`<div class="sub faint" style="font-size:12px;margin-top:2px">${esc(firmNote(f))}</div>`:""}</div>`).join("")}</div>`:`<p class="faint">Add firms to your wish list.</p>`;
 }
 function appsHTML(){
-  const apps=Object.values(S.apps).sort((a,b)=>(Date.parse(a.deadline)||9e15)-(Date.parse(b.deadline)||9e15)||(b.createdAt||0)-(a.createdAt||0));
+  const apps=Object.values(S.apps).sort((a,b)=>(parseDay(a.deadline)||9e15)-(parseDay(b.deadline)||9e15)||(b.createdAt||0)-(a.createdAt||0));
   const head=`<div class="section-title" style="margin:0 0 10px"><span class="hint" style="margin:0">Set a status on any job to track it here. Programs that only post on careers pages can be added by hand.</span><button class="btn sm" data-act="appNew">Track a program</button></div>`;
   if(!S.ready.apps) return head+`<div class="card">${'<div class="skel"></div>'.repeat(3)}</div>`;
   if(!apps.length) return head+`<div class="card empty"><h3>Nothing tracked yet</h3><p>Pick a status on a job, or track a program by hand.</p></div>`;
   return head+`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Firm</th><th>Program</th><th>Deadline</th><th>Status</th><th>Prep</th></tr></thead><tbody>
-  ${apps.map(a=>{const d=Date.parse(a.deadline); const f=firmById(a.firmId)||matchFirm(a.firm); const cs=f?firmPeople(f.id):[]; const talked=cs.filter(c=>["talked","thanked","advocate"].includes(c.stage)); const rz=Object.values(S.resumes).find(r=>(a.jobKey&&r.jobKey===a.jobKey)||(!a.jobKey&&r.firmId&&r.firmId===f?.id)); const open=!["Applied","Online test","HireVue","Superday","Offer","Rejected","Withdrawn"].includes(a.status); const sev=d&&open?(d<Date.now()+7*DAY?"crit":d<Date.now()+21*DAY?"warn":""):"";
+  ${apps.map(a=>{const d=parseDay(a.deadline); const f=firmById(a.firmId)||matchFirm(a.firm); const cs=f?firmPeople(f.id):[]; const talked=cs.filter(c=>["talked","thanked","advocate"].includes(c.stage)); const rz=Object.values(S.resumes).find(r=>(a.jobKey&&r.jobKey===a.jobKey)||(!a.jobKey&&r.firmId&&r.firmId===f?.id)); const open=!["Applied","Online test","HireVue","Superday","Offer","Rejected","Withdrawn"].includes(a.status); const sev=d&&open?(d<Date.now()+7*DAY?"crit":d<Date.now()+21*DAY?"warn":""):"";
     return `<tr><td class="nm">${esc(a.firm)}</td><td>${safeUrl(a.url)?`<a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.program||"Posting")} ↗</a>`:esc(a.program||"")}<div class="sub">${esc(a.location||"")}</div></td>
     <td class="mono">${a.deadline?`${esc(fmtDate(d))}<div class="sub" style="${sev?`color:var(--${sev})`:""}">${dueText(d)}</div>`:`<span class="faint">rolling</span>`}</td>
     <td><select class="in" data-chg="appStatus" data-id="${esc(a.id)}" style="font-size:12px;padding:4px 6px">${APP_STATUS.map(s=>`<option ${s===a.status?"selected":""}>${s}</option>`).join("")}</select></td>
@@ -1945,6 +1994,9 @@ async function gmailDraft(id,quiet){
     const r=await call("Gmail","create_draft",input);
     const patch={lastDraft:{kind:d.kind,at:Date.now(),url:r?.viewUrl||"",id:r?.id||""},log:addLog(c,`Saved ${KIND[d.kind].toLowerCase()} to Gmail drafts`)};
     if(first){ patch.subject=d.subject; if(c.stage==="lead"){ patch.stage="drafted"; patch.draftedAt=Date.now(); } }
+    /* Gmail sync can't see thank-yous and check-ins go out, so saving the draft is what moves them along. */
+    if(d.kind==="thanks"&&c.stage==="talked"){ patch.stage="thanked"; patch.thankedAt=Date.now(); }
+    if(d.kind==="checkin") patch.checkinAt=Date.now();
     await saveContact(id,patch);
     if(!quiet) toast(`Draft saved in Gmail${att?" with your resume":""}.`,"ok",r?.viewUrl);
     return true;
@@ -2260,7 +2312,7 @@ async function addFirmAndFind(name,from){
 }
 function jobByKey(k){ return allJobs().find(x=>x.key===k)||null; }
 async function trackJob(key,status){ const j=jobByKey(key); if(!j){ toast("That posting isn't on the desk anymore.","warn"); return false; } const f=firmById(j.firmId);
-  await saveApp("j-"+hashKey(j.key),{firm:f?.name||j.company,firmId:j.firmId||"",program:j.title,location:j.location||"",url:safeUrl(j.url),jobKey:j.key,status,...(status==="Applied"?{appliedAt:Date.now()}:{})}); return true; }
+  return (await saveApp("j-"+hashKey(j.key),{firm:f?.name||j.company,firmId:j.firmId||"",program:j.title,location:j.location||"",url:safeUrl(j.url),jobKey:j.key,status,...(status==="Applied"?{appliedAt:Date.now()}:{})}))===true; }
 const ACT = {
   tab:el=>setTab(el.dataset.tab),
   open:(el,e)=>{ if(e.target.closest('[data-stop]')) return; e.preventDefault(); openContact(el.dataset.id); },
@@ -2306,16 +2358,18 @@ const ACT = {
   exportFinder:()=>exportFinder(),
   // outreach
   writeCold:el=>{ const n=Number(el.dataset.n)||0; const items=readyList(S.o.guesses).slice(0,n).map(c=>({id:c.id,kind:c.referrer?"referral":"cold"})); writeBatch(items); },
-  writeFollowups:()=>{ const now=Date.now(); const items=Object.values(S.contacts).filter(c=>["emailed","fu1"].includes(c.stage)&&nextAction(c,now)?.due<=now+DAY).map(c=>({id:c.id,kind:c.stage==="emailed"?"fu1":"fu2"})); writeBatch(items); },
-  writeThanks:()=>writeBatch(Object.values(S.contacts).filter(c=>c.stage==="talked").map(c=>({id:c.id,kind:"thanks"}))),
-  writeCheckins:()=>{ const now=Date.now(); writeBatch(Object.values(S.contacts).filter(c=>["thanked","advocate"].includes(c.stage)&&nextAction(c,now)?.due<=now).map(c=>({id:c.id,kind:"checkin"}))); },
+  writeFollowups:()=>writeBatch(fuDue().map(x=>({id:x.c.id,kind:fuKind(x.c)}))),
+  writeThanks:()=>writeBatch(Object.values(S.contacts).filter(c=>c.stage==="talked"&&!inBatch(c)).map(c=>({id:c.id,kind:"thanks"}))),
+  writeCheckins:()=>writeBatch(checkinsDue().map(c=>({id:c.id,kind:"checkin"}))),
   taskAdd:()=>{ const el=$("#tdNew"); const text=(el?.value||"").trim(); if(!text) return toast("Type a task first.","warn"); const when=$("#tdWhen")?.value||"today";
     const id="t-"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); el.value="";
-    saveTask(id,{text:text.slice(0,200),due:when==="daily"?null:when==="tomorrow"?dayKeyOf(Date.now()+DAY):S.dayKey,repeat:when==="daily"?"daily":"",doneAt:null,createdAt:Date.now()}); },
+    const tm=new Date(); tm.setDate(tm.getDate()+1);
+    saveTask(id,{text:text.slice(0,200),due:when==="daily"?null:when==="tomorrow"?dayKeyOf(tm.getTime()):S.dayKey,repeat:when==="daily"?"daily":"",doneAt:null,createdAt:Date.now()}); },
   taskDel:el=>deleteTask(el.dataset.id),
-  tdGo:el=>{ if(el.dataset.sub) S.res.sub=el.dataset.sub; if(el.dataset.jv){ S.jobs.view=el.dataset.jv; S.jobs.firm=""; } setTab(el.dataset.tab); },
+  tdGo:el=>{ const tick=el.dataset.tick; if(tick&&S.ready.day&&!isChecked(tick)) saveDay({done:[...dayDone(),{k:tick,t:Date.now(),title:String(el.dataset.title||"").slice(0,160),...(el.dataset.ids?{ids:el.dataset.ids.split(",").filter(Boolean).slice(0,300)}:{})}].slice(-300)});
+    if(el.dataset.sub) S.res.sub=el.dataset.sub; if(el.dataset.jv){ S.jobs.view=el.dataset.jv; S.jobs.firm=""; } setTab(el.dataset.tab); },
   tdTrack:el=>trackJob(el.dataset.key,"Open"),
-  tdApplied:async el=>{ if(!S.db) return toast(NO_DB,"warn"); if(el.dataset.app) await saveApp(el.dataset.app,{status:"Applied",appliedAt:Date.now()}); else if(el.dataset.key){ if(!(await trackJob(el.dataset.key,"Applied"))) return; } toast("Marked applied. It's under Tracked on the Jobs tab.","ok"); },
+  tdApplied:async el=>{ if(!S.db) return toast(NO_DB,"warn"); const ok=el.dataset.app?(await saveApp(el.dataset.app,{status:"Applied",appliedAt:Date.now()}))===true:el.dataset.key?await trackJob(el.dataset.key,"Applied"):false; if(ok) toast("Marked applied. It's under Tracked on the Jobs tab.","ok"); },
   closeOut:async()=>{ const now=Date.now(); const list=Object.values(S.contacts).filter(c=>c.stage==="fu2"&&nextAction(c,now)?.due<=now); for(const c of list) await saveContact(c.id,{stage:"closed",log:addLog(c,"Closed after two follow-ups")}).catch(()=>{}); toast(`Closed ${list.length}.`,""); },
   batchSave:()=>saveBatch(),
   batchDiscard:()=>{ S.batch=[]; saveBatchLocal(); updateOutreach(); },
@@ -2421,7 +2475,7 @@ const CHG = {
     await trackJob(j.key,el.value); },
   taskDone:el=>{ const key=el.dataset.key;
     if(el.dataset.oneoff&&el.dataset.cid){ saveTask(el.dataset.cid,{doneAt:el.checked?Date.now():null}); return; }
-    const done=dayDone().filter(d=>d.k!==key); if(el.checked) done.push({k:key,t:Date.now(),title:String(el.dataset.title||"").slice(0,160)});
+    const done=dayDone().filter(d=>d.k!==key); if(el.checked) done.push({k:key,t:Date.now(),title:String(el.dataset.title||"").slice(0,160),...(el.dataset.ids?{ids:el.dataset.ids.split(",").filter(Boolean).slice(0,300)}:{})});
     saveDay({done:done.slice(-300)}); },
   appStatus:el=>saveApp(el.dataset.id,{status:el.value,...(el.value==="Applied"?{appliedAt:Date.now()}:{})}),
   tjPick:el=>{ S.res.job=el.value; $("#tjPasteWrap").hidden=$("#tjPasteMeta").hidden=el.value!=="_paste"; updateTailor(); },
@@ -2483,7 +2537,7 @@ function subscribe(){
   subDay();
 }
 async function boot(){
-  lsSet("cd.tab",S.tab); lsSet("cd.tabDay",S.dayKey);
+  lsSet("cd.tab",S.tab); lsSet("cd.tabDay",S.dayKey); try{ history.replaceState(null,"","#"+S.tab); }catch{}
   renderTabs(); renderConns(); mountView();
   const use=n=>(window.claude&&typeof window.claude.use==="function")?window.claude.use(n).catch(()=>null):Promise.resolve(null);
   const [db,mcp,sample,assets,downloads,perms]=await Promise.all(["db","mcp","sample","assets","downloads","permissions"].map(use));
