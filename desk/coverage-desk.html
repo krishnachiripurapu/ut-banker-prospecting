@@ -1123,7 +1123,7 @@ function updateOutreach(){
   // review batch (shown first while it exists)
   let html="";
   if(S.batch.length){
-    html+=`<div class="card"><div class="card-h"><div><div class="eyebrow">Review</div><h3>${S.batch.length} email${S.batch.length>1?"s":""} ready to ${mailKey()==="outlook"?"send":"save"}</h3></div><div class="btn-row">${mailKey()==="outlook"?`<button class="btn primary" data-act="openAll">Open all ${S.batch.length} in Outlook</button><a class="btn" data-compose data-bi="0" href="${esc(MAIL.outlook.drafts)}" target="_blank" rel="noopener">Open next ↗</a>`:`<button class="btn primary" data-act="batchSave" ${S.bulk?"disabled":""}>Save all to Gmail drafts</button>`}<button class="btn ghost" data-act="batchDiscard">Discard all</button></div></div>
+    html+=`<div class="card"><div class="card-h"><div><div class="eyebrow">Review</div><h3>${S.batch.length} email${S.batch.length>1?"s":""} ready to ${mailKey()==="outlook"?"send":"save"}</h3></div><div class="btn-row">${mailKey()==="outlook"?`<button class="btn primary" data-act="openAll">Open all ${S.batch.length} in Outlook</button><a class="btn" data-compose data-bi="0" href="${esc(MAIL.outlook.drafts)}" target="_blank" rel="noopener">Open next ↗</a>`:`<button class="btn primary" data-act="batchSave" ${S.bulk?"disabled":""}>Save all to Gmail drafts</button>`}<button class="btn" data-act="batchExcel">Download Excel</button><button class="btn ghost" data-act="batchDiscard">Discard all</button></div></div>
     <div class="card-b stack" style="gap:14px">${S.batch.map((it,i)=>{const c=S.contacts[it.id]||{}; return `<div class="batch-item"><div class="section-title" style="margin:0"><div style="min-width:0"><strong>${esc(c.name||"")}</strong> <span class="faint">· ${esc(firmOf(c)?.name||c.firm||"")} · ${esc(KIND[it.kind])}</span><div class="sub mono" style="overflow-wrap:anywhere">${esc(c.email||"")} ${emailBadge(c)}</div></div><div class="btn-row">${mailKey()==="outlook"&&c.email?`<a class="btn sm primary" data-compose data-bi="${i}" href="${esc(MAIL.outlook.drafts)}" target="_blank" rel="noopener">Open in Outlook ↗</a>`:""}<button class="btn sm ghost" data-act="batchRemove" data-i="${i}">Remove</button></div></div>
       <input class="in" data-bi="${i}" data-bf="subject" value="${esc(it.subject)}" aria-label="Subject"><textarea class="in" rows="8" data-bi="${i}" data-bf="body" aria-label="Email body">${esc(it.body)}</textarea>${it.note?`<p class="hint" style="margin:0">${esc(it.note)}</p>`:""}</div>`;}).join("")}
       <p class="hint" style="margin:0">${mailKey()==="outlook"?"Open all puts each email in its own Outlook tab; Open next opens them one per click. Attach your resume to first emails and send. An email leaves this list once it opens. If your browser blocks the tabs, allow pop-ups for claude.ai (the icon at the right of the address bar) and click Open all again. If one opens blank, sign in to Outlook and click again, or copy it from the person's file.":p.resume?.url?`Your resume (${esc(p.resume.name||"PDF")}) attaches to each first email.`:"No resume attaches yet. On the Resumes tab, press Attach to cold emails."}</p></div></div>`;
@@ -2413,6 +2413,58 @@ function firmModal(id,name){
 }
 
 /* ---------- exports ---------- */
+/* ---------- Excel export (no library: a small .xlsx with one sheet formatted as a table) ---------- */
+const CRC_T=(()=>{ const t=new Uint32Array(256); for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=c&1?0xEDB88320^(c>>>1):c>>>1; t[n]=c>>>0; } return t; })();
+function crc32(u){ let c=0xFFFFFFFF; for(let i=0;i<u.length;i++) c=CRC_T[(c^u[i])&0xFF]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+/* Stored (uncompressed) zip, which is all an .xlsx needs. */
+function zipStore(files){
+  const te=new TextEncoder(), parts=[], cen=[]; let off=0;
+  const u16=n=>[n&255,(n>>>8)&255], u32=n=>[n&255,(n>>>8)&255,(n>>>16)&255,(n>>>24)&255];
+  for(const f of files){
+    const name=te.encode(f.name), data=typeof f.data==="string"?te.encode(f.data):f.data, crc=crc32(data);
+    const head=[...u32(0x04034b50),...u16(20),...u16(0x0800),...u16(0),...u16(0),...u16(0x21),...u32(crc),...u32(data.length),...u32(data.length),...u16(name.length),...u16(0)];
+    parts.push(new Uint8Array(head),name,data);
+    cen.push(new Uint8Array([...u32(0x02014b50),...u16(20),...u16(20),...u16(0x0800),...u16(0),...u16(0),...u16(0x21),...u32(crc),...u32(data.length),...u32(data.length),...u16(name.length),...u16(0),...u16(0),...u16(0),...u16(0),...u32(0),...u32(off)]),name);
+    off+=head.length+name.length+data.length;
+  }
+  const cenLen=cen.reduce((a,b)=>a+b.length,0);
+  const end=new Uint8Array([...u32(0x06054b50),...u16(0),...u16(0),...u16(files.length),...u16(files.length),...u32(cenLen),...u32(off),...u16(0)]);
+  return new Blob([...parts,...cen,end],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+}
+const xesc=v=>String(v??"").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+function colName(i){ let s=""; i++; while(i){ const m=(i-1)%26; s=String.fromCharCode(65+m)+s; i=Math.floor((i-1)/26); } return s; }
+/* rows: array of arrays of strings; first row is the header. widths in characters. wrapCols: column indexes to wrap. */
+function xlsxBlob(sheet,rows,widths,wrapCols=[]){
+  const NS='xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"', RNS='xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+  const n=rows.length, last=colName(rows[0].length-1), ref=`A1:${last}${n}`;
+  const cell=(v,r,c)=>`<c r="${colName(c)}${r}" t="inlineStr" s="${r===1?1:wrapCols.includes(c)?2:3}"><is><t xml:space="preserve">${xesc(v)}</t></is></c>`;
+  const sheetXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet ${NS} ${RNS}><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${widths.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join("")}</cols><sheetData>${rows.map((row,ri)=>`<row r="${ri+1}">${row.map((v,ci)=>cell(v,ri+1,ci)).join("")}</row>`).join("")}</sheetData><tableParts count="1"><tablePart r:id="rId1"/></tableParts></worksheet>`;
+  const tableXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><table ${NS} id="1" name="${sheet}" displayName="${sheet}" ref="${ref}" totalsRowShown="0"><autoFilter ref="${ref}"/><tableColumns count="${rows[0].length}">${rows[0].map((h,i)=>`<tableColumn id="${i+1}" name="${xesc(h)}"/>`).join("")}</tableColumns><tableStyleInfo name="TableStyleLight9" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/></table>`;
+  const styles=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet ${NS}><fonts count="2"><font><sz val="10"/><name val="Arial"/></font><font><b/><sz val="10"/><name val="Arial"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  return zipStore([
+    {name:"[Content_Types].xml",data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/tables/table1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`},
+    {name:"_rels/.rels",data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
+    {name:"xl/workbook.xml",data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook ${NS} ${RNS}><sheets><sheet name="${sheet}" sheetId="1" r:id="rId1"/></sheets></workbook>`},
+    {name:"xl/_rels/workbook.xml.rels",data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`},
+    {name:"xl/styles.xml",data:styles},
+    {name:"xl/worksheets/sheet1.xml",data:sheetXml},
+    {name:"xl/worksheets/_rels/sheet1.xml.rels",data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/></Relationships>`},
+    {name:"xl/tables/table1.xml",data:tableXml},
+  ]);
+}
+/* The review list as a spreadsheet: one row per email, with Approved and Status columns to fill in. */
+async function exportBatchXlsx(){
+  if(!S.batch.length) return toast("Nothing in the list to export.","warn");
+  const head=["Name","First name","Firm","Title","To","Subject","Body","Approved","Status","LinkedIn","Body (HTML)"];
+  const rows=[head,...S.batch.map(it=>{ const c=S.contacts[it.id]||{}; const body=String(it.body||"");
+    const htmlBody=body.trim().split(/\n{2,}/).map(x=>`<p>${esc(x).replace(/\n/g,"<br>")}</p>`).join("");
+    return [c.name||"",splitName(c.name||"").first||c.first||"",firmOf(c)?.name||c.firm||"",c.title||"",c.email||"",it.subject||"",body,"No","",c.linkedin||"",htmlBody]; })];
+  const blob=xlsxBlob("Emails",rows,[24,12,22,30,34,52,80,10,10,38,40],[6]);
+  const filename=`Cold emails ${S.dayKey||new Date().toISOString().slice(0,10)}.xlsx`;
+  if(S.downloads){ try{ await S.downloads.save({filename,data:blob}); toast(`Saved ${rows.length-1} email${rows.length===2?"":"s"} to ${filename}.`,"ok"); return; }catch(e){ if(e?.code==="declined") return; } }
+  try{ const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename; document.body.append(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1000); }
+  catch{ toast("Couldn't save the file here. Open the desk in Claude and try again.","warn"); }
+}
 async function saveFile(filename,text){
   if(S.downloads){ try{ await S.downloads.save({filename,data:text}); return; }catch(e){ if(e?.code==="declined") return; } }
   openModal(`<div class="hd"><h2>${esc(filename)}</h2><button class="icon-btn" data-act="closeModal" aria-label="Close">×</button></div><p class="muted" style="margin:0">Copy this text and save it as a .csv file.</p><textarea class="in" rows="14" readonly id="exportText">${esc(text)}</textarea><div class="btn-row"><button class="btn primary" data-act="copyExport">Copy</button></div>`);
@@ -2508,6 +2560,7 @@ const ACT = {
   closeOut:async()=>{ const now=Date.now(); const list=Object.values(S.contacts).filter(c=>c.stage==="fu2"&&nextAction(c,now)?.due<=now); for(const c of list) await saveContact(c.id,{stage:"closed",log:addLog(c,"Closed after two follow-ups")}).catch(()=>{}); toast(`Closed ${list.length}.`,""); },
   batchSave:()=>saveBatch(),
   openAll:()=>openAllCompose(),
+  batchExcel:()=>exportBatchXlsx(),
   batchDiscard:()=>{ S.batch=[]; saveBatchLocal(); updateOutreach(); },
   batchRemove:el=>{ S.batch.splice(Number(el.dataset.i),1); saveBatchLocal(); updateOutreach(); },
   // jobs
