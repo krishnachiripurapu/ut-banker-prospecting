@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Coverage Desk daily update helper.
 
-A scheduled Claude session makes the tool calls (ArtifactData, Gmail, Clay, Indeed).
+A scheduled Claude session makes the tool calls (ArtifactData, Outlook or Gmail, Clay, Indeed).
 This script does the bookkeeping, so every run applies the same rules as the page:
 
     python3 desk_daily.py plan  DB_DIR                     > WORK/plan.json
@@ -12,7 +12,7 @@ DB_DIR   ArtifactData `list` dumps made with out_dir:
          DB_DIR/contacts/*.json, DB_DIR/targets/*.json, DB_DIR/config/*.json, DB_DIR/jobs/*.json
 WORK/inputs.jsonl
          one line per connector result the session saved to a file:
-         {"kind": "gmail_sent" | "gmail_reply" | "gmail_bounce" | "clay" | "clay_any" | "clay_lookup" | "clay_verify"
+         {"kind": "outlook_sent" | "outlook_inbox" | "gmail_sent" | "gmail_reply" | "gmail_bounce" | "clay" | "clay_any" | "clay_lookup" | "clay_verify"
                   | "indeed" | "indeed_open", "path": "...", "firm_id": "<indeed only>", "chunk": <clay_lookup/clay_verify only>}
 apply writes WORK/writes/*.json (one document or patch each) and WORK/writes.json:
          [{"op": "set" | "update", "collection": ..., "doc_id": ..., "file_path": ..., "existing": bool}]
@@ -28,7 +28,7 @@ import re
 import sys
 import time
 import unicodedata
-from datetime import datetime
+from datetime import datetime, timezone
 
 try:
     from zoneinfo import ZoneInfo
@@ -118,6 +118,7 @@ NOT_FIRM = re.compile(r"\b(selby jennings|afterquery|dataannotation|nepternship|
 EMAIL_RE = re.compile(r"[A-Z0-9._%+'-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.I)
 WATCH = ("lead", "drafted", "emailed", "fu1", "fu2")
 RANK = {"lead": 0, "drafted": 0, "emailed": 1, "fu1": 2, "fu2": 3}
+RESEND_MS = 10 * 60_000
 MAX_CLAY_BATCHES = 6      # 10 firms per Clay search
 MAX_INDEED_FIRMS = 10     # 2 Indeed searches per firm
 MAX_FALLBACK_BATCHES = 2  # banker-title searches without the school filter, only when alumni searches come up short
@@ -180,6 +181,68 @@ def msg_ms(m):
         return int(datetime.fromisoformat(str(m.get("date", "")).replace("Z", "+00:00")).timestamp() * 1000)
     except ValueError:
         return 0
+
+
+def iso_ms(v):
+    try:
+        return int(datetime.fromisoformat(str(v or "").replace("Z", "+00:00")).timestamp() * 1000)
+    except ValueError:
+        return 0
+
+
+def ms_iso(ms):
+    return datetime.fromtimestamp(ms / 1000, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def outlook_messages(data):
+    """Every message object in a saved outlook_email_search result, whatever wrapper the session saved it in:
+    a list of messages, MCP content blocks whose text is JSON, or several JSON objects in one text file."""
+    out = {}
+
+    def take(j):
+        if isinstance(j, list):
+            for x in j:
+                take(x)
+        elif isinstance(j, dict):
+            if j.get("id") and any(k in j for k in ("subject", "sender", "recipients")):
+                out[str(j["id"])] = j
+                return
+            if isinstance(j.get("text"), str):
+                take_text(j["text"])
+            for v in j.values():
+                if isinstance(v, (list, dict)):
+                    take(v)
+        elif isinstance(j, str):
+            take_text(j)
+
+    def take_text(t):
+        t = t.strip()
+        if not t:
+            return
+        try:
+            take(json.loads(t))
+            return
+        except ValueError:
+            pass
+        dec, i = json.JSONDecoder(), 0
+        while True:
+            i = t.find("{", i)
+            if i < 0:
+                break
+            try:
+                obj, end = dec.raw_decode(t, i)
+            except ValueError:
+                i += 1
+                continue
+            take(obj)
+            i = end
+
+    take(data)
+    return list(out.values())
+
+
+NDR_SUBJ = re.compile(r"^(undeliverable|undelivered|delivery (status notification|has failed)|mail delivery (failed|subsystem)|returned mail)", re.I)
+AUTO_SUBJ = re.compile(r"^(automatic reply|auto(matic)?[- ]?reply|auto:|out of (the )?office)", re.I)
 
 
 def add_log(c, text, t):
@@ -392,12 +455,20 @@ def plan(db_dir):
     sod = day_start(now)
     watch = sorted({c["email"].lower() for c in d.contacts.values() if c.get("email") and (c.get("stage") or "lead") in WATCH})
     chunks = [watch[i:i + 12] for i in range(0, len(watch), 12)]
-    gmail = []
+    gmail, outlook = [], []
+    mail = "gmail" if d.profile.get("mail") == "gmail" else "outlook"
+    if mail == "outlook" and watch:
+        last = int((d.config.get("lastRun") or {}).get("mailAt") or 0)
+        sent_since = last - 3 * DAY if last else now - 120 * DAY
+        inbox_since = max(sent_since, now - 14 * DAY)
+        outlook = [{"kind": "outlook_sent", "args": {"folderName": "Sent Items", "afterDateTime": ms_iso(sent_since), "limit": 25}},
+                   {"kind": "outlook_inbox", "args": {"folderName": "Inbox", "afterDateTime": ms_iso(inbox_since), "limit": 25}}]
+        chunks = []
     for ch in chunks:
         ors = " OR ".join(ch)
         gmail.append({"kind": "gmail_sent", "query": f"in:sent to:({ors}) newer_than:180d", "view": "THREAD_VIEW_METADATA_ONLY"})
         gmail.append({"kind": "gmail_reply", "query": f"from:({ors}) newer_than:180d", "view": "THREAD_VIEW_METADATA_ONLY"})
-    if watch:
+    if watch and mail == "gmail":
         gmail.append({"kind": "gmail_bounce", "query": "from:(mailer-daemon OR postmaster) newer_than:60d", "view": "THREAD_VIEW_MINIMAL"})
 
     added_today = sum(1 for c in d.contacts.values() if (c.get("createdAt") or 0) >= sod)
@@ -429,7 +500,7 @@ def plan(db_dir):
         indeed.append({"firm_id": f["id"], "queries": [{"search": s, "location": "United States", "country_code": "US"} for s in qs]})
 
     open_jobs = [{"search": s, "location": loc, "country_code": "US"} for s, loc in OPEN_SEARCHES]
-    return {"now": now, "watched_emails": len(watch), "gmail": gmail,
+    return {"now": now, "mail": mail, "watched_emails": len(watch), "outlook": outlook, "gmail": gmail,
             "clay": {"quota": quota, "batches": batches, "fallback_batches": fallback},
             "verify": verify, "indeed": indeed, "indeed_open": open_jobs}
 
@@ -444,6 +515,7 @@ def apply(db_dir, work):
         with open(path, encoding="utf-8") as f:
             inputs = [json.loads(l) for l in f if l.strip()]
     sent, replies, bounced = collections.defaultdict(list), collections.defaultdict(list), set()
+    o_sent, o_inbox, o_seen = [], [], False
     clay_payloads, indeed_by_firm, open_items = [], collections.defaultdict(list), []
     lookups, verifies = {}, []
     for inp in inputs:
@@ -453,7 +525,13 @@ def apply(db_dir, work):
             continue
         kind = inp.get("kind")
         threads = data.get("threads", []) if isinstance(data, dict) else []
-        if kind == "gmail_sent":
+        if kind == "outlook_sent":
+            o_sent.extend(outlook_messages(data))
+            o_seen = True
+        elif kind == "outlook_inbox":
+            o_inbox.extend(outlook_messages(data))
+            o_seen = True
+        elif kind == "gmail_sent":
             for t in threads:
                 for m in t.get("messages", []):
                     if "SENT" not in (m.get("labelIds") or []):
@@ -501,39 +579,118 @@ def apply(db_dir, work):
             base = cur.get("log") or list(d.contacts[cid].get("log") or [])
             cur["log"] = (logs + base)[:40]
 
-    # Gmail: sent, replies, bounces (same rules as syncGmail in the page)
-    for cid, c in d.contacts.items():
-        e = (c.get("email") or "").lower()
-        if not e or (c.get("stage") or "lead") not in WATCH:
-            continue
+    # Mail: sent, replies, bounces (same rules as applyMailSync in the page), keyed by contact id
+    watch = {cid: c for cid, c in d.contacts.items() if c.get("email") and (c.get("stage") or "lead") in WATCH}
+    by_email = {c["email"].lower(): cid for cid, c in watch.items()}
+    s_by, r_by, b_by, fix, via = collections.defaultdict(list), collections.defaultdict(list), set(), {}, "gmail"
+    if o_seen:
+        via = "outlook"
+
+        def by_name(e):
+            local, _, dom = e.partition("@")
+            l, hits = norm_name(local), []
+            for cid, c in watch.items():
+                f = d.firm_of(c) if hasattr(d, "firm_of") else None
+                if dom not in ((c.get("email") or "").split("@")[-1], (f or {}).get("mail")):
+                    continue
+                last, first = norm_name(c.get("last")), norm_name(c.get("first"))
+                if len(last) >= 3 and first and last in l and (first in l or l.startswith(first[0])):
+                    hits.append(cid)
+            return hits[0] if len(hits) == 1 else None
+
+        for m in o_sent:
+            at = iso_ms(m.get("sentDateTime") or m.get("receivedDateTime"))
+            if not at:
+                continue
+            rc = set()
+            for r in (m.get("recipients") or []) + [x.get("address") for x in (m.get("namedRecipients") or []) if isinstance(x, dict)]:
+                rc.update(emails_in(r))
+            for e in rc:
+                cid = by_email.get(e)
+                if not cid:
+                    cid = by_name(e)
+                    if cid:
+                        fix[cid] = e
+                        by_email[e] = cid
+                if cid:
+                    s_by[cid].append({"at": at, "id": m.get("id"), "threadId": m.get("conversationId") or "", "subject": m.get("subject") or ""})
+        for m in o_inbox:
+            at, subj = iso_ms(m.get("receivedDateTime") or m.get("sentDateTime")), str(m.get("subject") or "")
+            frm = (emails_in(m.get("sender")) or [""])[0]
+            if NDR_SUBJ.search(subj) or re.search(r"postmaster|mailer-daemon|microsoftexchange", frm, re.I):
+                for e in emails_in(f"{m.get('summary', '')} {subj}"):
+                    cid = by_email.get(e)
+                    if cid and (s_by.get(cid) or watch[cid].get("emailedAt")):
+                        b_by.add(cid)
+                continue
+            if AUTO_SUBJ.search(subj):
+                continue
+            cid = by_email.get(frm)
+            if cid and at:
+                r_by[cid].append(at)
+    else:
+        for e, lst in sent.items():
+            if e in by_email:
+                s_by[by_email[e]].extend(lst)
+        for e, lst in replies.items():
+            if e in by_email:
+                r_by[by_email[e]].extend(lst)
+        b_by = {by_email[e] for e in bounced if e in by_email}
+    label = "Outlook" if via == "outlook" else "Gmail"
+
+    for cid, c in watch.items():
         stage, patch = c.get("stage") or "lead", {}
-        rp = sorted(x for x in replies.get(e, []) if x)
-        if e in bounced and not rp:
+        logs = []
+        rp = sorted(x for x in r_by.get(cid, []) if x)
+        used = fix.get(cid)
+        if used and used != c["email"].lower() and cid not in b_by:
+            patch["email"] = used
+            logs.append(f"Using {used}, the address you emailed")
+        e = (patch.get("email") or c["email"]).lower()
+        if cid in b_by and not rp:
             bl = sorted(set((c.get("bounced") or []) + [e]))
             nxt = next((a for a in c.get("altEmails") or [] if a not in bl), "") or d.guess_email(c, bl)
-            patch = {"bounced": bl, "email": nxt, "emailSrc": "pattern" if nxt else "", "stage": "lead",
-                     "log": add_log(c, f"Bounced: {e}" + (f". Trying {nxt}" if nxt else ""), now)}
+            patch.update({"bounced": bl, "email": nxt, "emailSrc": "pattern" if nxt else "", "stage": "lead"})
+            logs.append(f"Bounced: {e}" + (f". Trying {nxt}" if nxt else ""))
             summary["bounces"] += 1
         else:
-            s = sorted((x for x in sent.get(e, []) if x["at"]), key=lambda x: x["at"])
-            if s:
-                first, last = s[0], s[-1]
+            s_ = []
+            for x in sorted((x for x in s_by.get(cid, []) if x["at"]), key=lambda x: x["at"]):
+                # A resend within 10 minutes (say, to add a forgotten attachment) is the same email.
+                if s_ and x["at"] - s_[-1]["at"] < RESEND_MS:
+                    s_[-1] = x
+                else:
+                    s_.append(x)
+            if s_:
+                first, last = s_[0], s_[-1]
                 if not c.get("emailedAt") or first["at"] < c["emailedAt"]:
                     patch["emailedAt"] = first["at"]
-                if not c.get("lastSentAt") or last["at"] > c["lastSentAt"]:
-                    patch.update(lastSentAt=last["at"], lastMsgId=last["id"], threadId=last["threadId"])
-                if c.get("sentCount") != len(s):
-                    patch["sentCount"] = len(s)
-                want = "fu2" if len(s) >= 3 else "fu1" if len(s) == 2 else "emailed"
+                if not c.get("lastSentAt") or last["at"] > c["lastSentAt"] or (not c.get("lastMsgId") and last["at"] >= c["lastSentAt"]):
+                    patch.update(lastSentAt=last["at"], lastMsgId=last["id"], threadId=last["threadId"], lastVia=via)
+                # Later runs look back only a few days, so count messages newer than the last one already counted.
+                total = int(c.get("sentCount") or 0) + sum(1 for x in s_ if x["at"] > (c.get("lastSentAt") or 0) + RESEND_MS)
+                if total != int(c.get("sentCount") or 0):
+                    patch["sentCount"] = total
+                if not c.get("subject"):
+                    subj = re.sub(r"^(re|fw|fwd):\s*", "", last.get("subject") or (c.get("draft") or {}).get("subject") or "", flags=re.I)
+                    if subj:
+                        patch["subject"] = subj
+                want = "fu2" if total >= 3 else "fu1" if total == 2 else "emailed"
                 if RANK[want] > RANK.get(stage, 0):
                     patch["stage"] = want
                     if RANK.get(stage, 0) == 0:
-                        patch["log"] = add_log(c, "Sent from Gmail", now)
+                        logs.append(f"Sent from {label}")
                         summary["newlySent"] += 1
             emailed_at = patch.get("emailedAt") or c.get("emailedAt")
             if rp and (not emailed_at or rp[-1] >= emailed_at - DAY):
-                patch.update(stage="replied", repliedAt=rp[-1], emailSrc="replied", log=add_log(c, "They replied", now))
+                patch.update(stage="replied", repliedAt=rp[-1], emailSrc="replied")
+                logs.append("They replied")
                 summary["replies"] += 1
+        if logs:
+            log = list(c.get("log") or [])
+            for text in logs:
+                log = add_log({"log": log}, text, now)
+            patch["log"] = log
         if patch:
             patch_contact(cid, patch)
 
@@ -705,7 +862,13 @@ def apply(db_dir, work):
 
     for k in ("newLeads", "verified", "replies", "newlySent", "bounces", "newRoles", "ibpcRoles", "internships", "firmsPulled", "firmsFromJobs"):
         summary.setdefault(k, 0)
-    emit("set", "config", "lastRun", {"at": now, "ok": True, "summary": dict(summary)}, "lastRun" in d.config)
+    run = {"at": now, "ok": True, "summary": dict(summary)}
+    prev_mail = (d.config.get("lastRun") or {}).get("mailAt")
+    if o_seen:
+        run["mailAt"] = now
+    elif prev_mail:
+        run["mailAt"] = prev_mail
+    emit("set", "config", "lastRun", run, "lastRun" in d.config)
     with open(os.path.join(work, "writes.json"), "w", encoding="utf-8") as f:
         json.dump(writes, f, indent=1)
     return {"summary": dict(summary), "writes": len(writes), "existing_needing_version": sum(1 for w in writes if w["existing"]),

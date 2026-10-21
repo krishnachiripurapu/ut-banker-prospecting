@@ -436,7 +436,7 @@ function classifyJob(title,firm,company){
   return {cat,level};
 }
 const STAGES = [
-  {id:"lead",label:"Lead",g:"reach"},{id:"drafted",label:"Draft in Gmail",g:"reach"},
+  {id:"lead",label:"Lead",g:"reach"},{id:"drafted",label:"Draft saved",g:"reach"},
   {id:"emailed",label:"Emailed",g:"wait"},{id:"fu1",label:"Followed up",g:"wait"},{id:"fu2",label:"Final nudge sent",g:"wait"},
   {id:"replied",label:"Replied",g:"engaged"},{id:"scheduled",label:"Call set",g:"engaged"},
   {id:"talked",label:"Talked",g:"done"},{id:"thanked",label:"Thanked",g:"done"},{id:"advocate",label:"Advocate",g:"done"},
@@ -654,7 +654,7 @@ function nextAction(c,now=Date.now()){
   const fu=(Number(P().followUpDays)||6)*DAY;
   switch(c.stage||"lead"){
     case "lead": return c.email ? (isVerified(c)?{label:"Write the cold email",due:c.createdAt||now,sev:"info",act:"compose",kind:c.referrer?"referral":"cold"}:{label:"Verify the email, then write",due:null,sev:"info",act:"findEmail",kind:c.referrer?"referral":"cold"}) : {label:"Find an email",due:null,sev:"info",act:"findEmail",kind:c.referrer?"referral":"cold"};
-    case "drafted": return {label:"Send your Gmail draft",due:c.draftedAt||now,sev:"warn",act:"gmailLink"};
+    case "drafted": return {label:`Send your ${M().name} draft`,due:c.draftedAt||now,sev:"warn",act:"gmailLink"};
     case "emailed": return {label:"Send follow-up 1",due:(c.lastSentAt||c.emailedAt||now)+fu,sev:"warn",act:"compose",kind:"fu1"};
     case "fu1": return {label:"Send the final follow-up",due:(c.lastSentAt||now)+fu,sev:"warn",act:"compose",kind:"fu2"};
     case "fu2": return {label:"No reply. Close it out",due:(c.lastSentAt||now)+fu,sev:"info",act:"close"};
@@ -674,7 +674,8 @@ const isVerified = c => !!c.email && VERIFIED.includes(c.emailSrc);
 function emailStatus(c){ if(!c.email) return (c.bounced||[]).length?"Bounced":"None"; return isVerified(c)?"Verified":"Guessed"; }
 function emailBadge(c){ const s=emailStatus(c); const cls={Verified:"v",Guessed:"g",Bounced:"x",None:"x"}[s]; const txt={Verified:"verified",Guessed:"guess",Bounced:"bounced",None:"no email"}[s]; return `<span class="src ${cls}">${txt}</span>`; }
 function hashKey(s){ let h=5381; for(const ch of String(s)) h=((h<<5)+h+ch.charCodeAt(0))|0; return (h>>>0).toString(36); }
-function readyList(includeGuesses){ return Object.values(S.contacts).filter(c=>(c.stage||"lead")==="lead"&&c.email&&(includeGuesses||isVerified(c))&&!S.batch.some(b=>b.id===c.id)).sort((a,b)=>(b.ties||[]).length-(a.ties||[]).length||(a.createdAt||0)-(b.createdAt||0)); }
+/* People with a prepared email go first, in the order of the sending plan; then the usual order. */
+function readyList(includeGuesses){ return Object.values(S.contacts).filter(c=>(c.stage||"lead")==="lead"&&c.email&&(includeGuesses||isVerified(c))&&!S.batch.some(b=>b.id===c.id)).sort((a,b)=>(a.draft?.prepared?a.queue??1e9:1e9)-(b.draft?.prepared?b.queue??1e9:1e9)||(b.ties||[]).length-(a.ties||[]).length||(a.createdAt||0)-(b.createdAt||0)); }
 function dueList(){ const now=Date.now(); return Object.values(S.contacts).filter(c=>{ if(!["emailed","fu1","fu2","replied","scheduled","talked"].includes(c.stage)) return false; const a=nextAction(c,now); return a&&a.due!=null&&a.due<=now+DAY; }); }
 function counts(){
   const cs=Object.values(S.contacts); const on=FIRMS.filter(f=>f.on);
@@ -692,8 +693,8 @@ function renderTabs(){
   const p=P(); $("#mastSub").textContent=[p.school, p.gradYear?`Class of ${p.gradYear}`:p.year, "IB / Private credit"].filter(Boolean).join(" · ");
 }
 function renderConns(){
-  const names=["Clay","Gmail","Indeed"];
-  $("#conns").innerHTML=names.map(n=>{ const s=S.conn[n]; const cls=s==="ok"?"ok":s==="reauth"?"warn":s==="missing"?"crit":""; const t=s==="ok"?"connected":s==="reauth"?"reconnect in Settings":s==="missing"?"not connected":"checking"; return `<span class="conn" title="${n}: ${t}"><span class="dot ${cls}"></span>${n}</span>`; }).join("");
+  const names=["Clay",M().server,"Indeed"];
+  $("#conns").innerHTML=names.map(n=>{ const s=S.conn[n]; const cls=s==="ok"?"ok":s==="reauth"?"warn":s==="missing"?"crit":""; const t=s==="ok"?"connected":s==="reauth"?"reconnect in Settings":s==="missing"?"not connected":"checking"; return `<span class="conn" title="${connLabel(n)}: ${t}"><span class="dot ${cls}"></span>${connLabel(n)}</span>`; }).join("");
 }
 let rq=0;
 function dataChanged(){ if(rq) return; rq=requestAnimationFrame(()=>{ rq=0; buildIndex(); renderTabs(); updateView(); renderDrawer(); }); }
@@ -705,7 +706,7 @@ function mountView(){ const m=$("#main"), old=$("#tdNew"), keep=old&&{v:old.valu
 function updateView(){ VIEWS[S.tab]()[1](); }
 function banners(){
   if(!S.booted) return "";
-  if(!S.db) return `<div class="banner warn"><strong>Open this page in Claude</strong><span class="muted">Saving, Gmail, Clay and job search only work inside the Claude viewer.</span></div>`;
+  if(!S.db) return `<div class="banner warn"><strong>Open this page in Claude</strong><span class="muted">Saving, ${M().name}, Clay and job search only work inside the Claude viewer.</span></div>`;
   if(S.ready.profile && !P().name) return `<div class="banner"><strong>Finish setup</strong><span class="muted">Add your name and availability so emails come out ready to send.</span><button class="btn sm" data-act="tab" data-tab="settings">Open Settings</button></div>`;
   return "";
 }
@@ -720,7 +721,13 @@ function firmPeople(id){ return S.idx.byFirm[id]||[]; }
 /* ---------- Today: the daily task list ----------
    Rebuilt from the desk on every change, so doing the work (sending, replying, applying) clears a task
    by itself. Check marks are kept per day in days/<date>; your own tasks live in tasks/<id>. */
-const GMAIL_DRAFTS="https://mail.google.com/mail/u/0/#drafts";
+/* Mail account: Outlook through the Microsoft 365 connector (default) or Gmail. Set in Settings. */
+const MAIL={outlook:{key:"outlook",name:"Outlook",server:"Microsoft 365",drafts:"https://outlook.office.com/mail/drafts"},
+  gmail:{key:"gmail",name:"Gmail",server:"Gmail",drafts:"https://mail.google.com/mail/u/0/#drafts"}};
+const mailKey=()=>P().mail==="gmail"?"gmail":"outlook";
+const M=()=>MAIL[mailKey()];
+const MS="Microsoft 365";
+const connLabel=n=>n===MS?"Outlook":n;
 const OPEN_APP=["Watching","Open"], PREP_APP=["Online test","HireVue","Superday"];
 const TD_SECS=[["first","Do first"],["out","Outreach"],["jobs","Applications"],["setup","Set up"]];
 function fmtMins(m){ m=Math.round(m); if(m<60) return `${m} min`; const h=Math.floor(m/60), r=m%60; return r?`${h} h ${r} min`:`${h} h`; }
@@ -731,7 +738,7 @@ function isChecked(key){ return dayDone().some(d=>d.k===key); }
 function resumeFor(a){ return Object.values(S.resumes).find(r=>(a.jobKey&&r.jobKey===a.jobKey)||(!a.jobKey&&r.firmId&&r.firmId===a.firmId)); }
 const inBatch=c=>S.batch.some(b=>b.id===c.id);
 const fuKind=c=>c.stage==="emailed"?"fu1":"fu2";
-/* A follow-up saved to Gmail but not sent yet. Gmail sync moves the stage once it goes out. */
+/* A follow-up saved as a draft but not sent yet. Mail sync moves the stage once it goes out. */
 const fuPending=c=>c.lastDraft?.kind===fuKind(c)&&(c.lastDraft.at||0)>(c.lastSentAt||c.emailedAt||0);
 function fuDue(now=Date.now()){ return Object.values(S.contacts).filter(c=>["emailed","fu1"].includes(c.stage)&&!inBatch(c)&&!fuPending(c)).map(c=>({c,a:nextAction(c,now)})).filter(x=>x.a&&x.a.due<=now+DAY).sort((x,y)=>x.a.due-y.a.due); }
 function checkinsDue(now=Date.now()){ return Object.values(S.contacts).filter(c=>["thanked","advocate"].includes(c.stage)&&!inBatch(c)&&nextAction(c,now)?.due<=now); }
@@ -785,13 +792,13 @@ function todayPlan(){
   }
 
   // Outreach
-  if(S.batch.length) add("out",{key:"batch",sev:"warn",mins:S.batch.length,ids:S.batch.map(b=>b.id),title:`Review ${S.batch.length} written email${S.batch.length>1?"s":""} and save them to Gmail`,sub:"They're waiting on the Outreach tab.",acts:[{act:"tab",label:"Review",data:{tab:"outreach"}}]});
+  if(S.batch.length) add("out",{key:"batch",sev:"warn",mins:S.batch.length,ids:S.batch.map(b=>b.id),title:`Review ${S.batch.length} written email${S.batch.length>1?"s":""} and save them to ${M().name}`,sub:"They're waiting on the Outreach tab.",acts:[{act:"tab",label:"Review",data:{tab:"outreach"}}]});
   const drafted=cs.filter(c=>!inBatch(c)&&(c.stage==="drafted"||(["emailed","fu1"].includes(c.stage)&&fuPending(c))||(["thanks","checkin"].includes(c.lastDraft?.kind)&&(c.lastDraft.at||0)>=sod)));
-  if(drafted.length) add("out",{key:"drafts",sev:"warn",mins:drafted.length,ids:ids(drafted),title:`Send your ${drafted.length} Gmail draft${drafted.length>1?"s":""}`,sub:"Send them from Gmail, then press Check Gmail so the desk sees it.",who:who(drafted),more:more(drafted),acts:[{href:GMAIL_DRAFTS,label:"Gmail drafts"},{act:"sync",label:"Check Gmail"}]});
+  if(drafted.length) add("out",{key:"drafts",sev:"warn",mins:drafted.length,ids:ids(drafted),title:`Send your ${drafted.length} ${M().name} draft${drafted.length>1?"s":""}`,sub:`${mailKey()==="outlook"?"Attach your resume to each first email, send them from Outlook":"Send them from Gmail"}, then press Check ${M().name} so the desk sees it.`,who:who(drafted),more:more(drafted),acts:[{href:M().drafts,label:`${M().name} drafts`},{act:"sync",label:`Check ${M().name}`}]});
   const fus=fuDue(now);
-  if(fus.length) add("out",{key:"fu",sev:fus.some(x=>x.a.due<sod)?"warn":"",mins:fus.length,ids:fus.map(x=>x.c.id),title:`Write ${fus.length} follow-up${fus.length>1?"s":""}`,sub:`No reply after ${p.followUpDays} days. They go in the same Gmail thread.`,who:who(fus.map(x=>x.c)),more:more(fus),acts:[{act:"writeFollowups",label:"Write them"}]});
+  if(fus.length) add("out",{key:"fu",sev:fus.some(x=>x.a.due<sod)?"warn":"",mins:fus.length,ids:fus.map(x=>x.c.id),title:`Write ${fus.length} follow-up${fus.length>1?"s":""}`,sub:`No reply after ${p.followUpDays} days. They go in the same ${M().name} thread.`,who:who(fus.map(x=>x.c)),more:more(fus),acts:[{act:"writeFollowups",label:"Write them"}]});
   const cap=Number(p.dailyCap)||20, {sent,unsent,room}=coldRoom(cs,sod), ready=readyList(S.o.guesses), readyAll=readyList(true);
-  const sentLine=`${sent} of ${cap} sent today${unsent?`, ${unsent} waiting in Gmail drafts`:""}`;
+  const sentLine=`${sent} of ${cap} sent today${unsent?`, ${unsent} waiting in ${M().name} drafts`:""}`;
   if(sent>=cap) add("out",{key:"cold",autoDone:true,title:"Send today's cold emails",sub:`${sent} of ${cap} sent today. Goal met.`});
   else if(ready.length&&room){ const n=Math.min(room,ready.length); add("out",{key:"cold",mins:2*n,title:`Write and send ${n} cold email${n>1?"s":""}`,sub:`${sentLine} · ${ready.length} ${S.o.guesses?"people":"verified emails"} ready`,who:who(ready.slice(0,n)),more:Math.max(0,n-8),acts:[{act:"writeCold",label:`Write ${n}`,data:{n}}]}); }
   else if(!ready.length&&readyAll.length&&room) add("out",{key:"cold",mins:2,title:"Pick who to email today",sub:`${readyAll.length} people have only a guessed email so far. Include guesses on Outreach, or wait for the morning run to verify them.`,acts:[{act:"tab",label:"Outreach",data:{tab:"outreach"}}]});
@@ -1099,8 +1106,8 @@ function updatePeople(){
 
 /* ---------- Step 3: Outreach ---------- */
 function mountOutreach(){
-  $("#view").innerHTML=`<div class="section-title"><div><div class="eyebrow">Step 3</div><h2>Outreach</h2><p class="muted lead-p">Write emails for everyone who's ready, review them here, then save them to Gmail drafts. You send from Gmail.</p></div>
-    <div class="btn-row"><span class="faint mono" style="font-size:11px" id="oSync"></span><button class="btn" data-act="sync" id="oSyncBtn">Check Gmail</button></div></div>
+  $("#view").innerHTML=`<div class="section-title"><div><div class="eyebrow">Step 3</div><h2>Outreach</h2><p class="muted lead-p">Write emails for everyone who's ready, review them here, then save them to ${M().name} drafts. You send from ${M().name}.</p></div>
+    <div class="btn-row"><span class="faint mono" style="font-size:11px" id="oSync"></span><button class="btn" data-act="sync" id="oSyncBtn">Check ${M().name}</button></div></div>
   <div class="grid2"><div class="stack" id="oMain"></div><div class="stack" id="oSide"></div></div>`;
 }
 function updateOutreach(){
@@ -1111,10 +1118,10 @@ function updateOutreach(){
   // review batch (shown first while it exists)
   let html="";
   if(S.batch.length){
-    html+=`<div class="card"><div class="card-h"><div><div class="eyebrow">Review</div><h3>${S.batch.length} email${S.batch.length>1?"s":""} ready to save</h3></div><div class="btn-row"><button class="btn primary" data-act="batchSave" ${S.bulk?"disabled":""}>Save all to Gmail drafts</button><button class="btn ghost" data-act="batchDiscard">Discard all</button></div></div>
+    html+=`<div class="card"><div class="card-h"><div><div class="eyebrow">Review</div><h3>${S.batch.length} email${S.batch.length>1?"s":""} ready to save</h3></div><div class="btn-row"><button class="btn primary" data-act="batchSave" ${S.bulk?"disabled":""}>Save all to ${M().name} drafts</button><button class="btn ghost" data-act="batchDiscard">Discard all</button></div></div>
     <div class="card-b stack" style="gap:14px">${S.batch.map((it,i)=>{const c=S.contacts[it.id]||{}; return `<div class="batch-item"><div class="section-title" style="margin:0"><div style="min-width:0"><strong>${esc(c.name||"")}</strong> <span class="faint">· ${esc(firmOf(c)?.name||c.firm||"")} · ${esc(KIND[it.kind])}</span><div class="sub mono" style="overflow-wrap:anywhere">${esc(c.email||"")} ${emailBadge(c)}</div></div><button class="btn sm ghost" data-act="batchRemove" data-i="${i}">Remove</button></div>
       <input class="in" data-bi="${i}" data-bf="subject" value="${esc(it.subject)}" aria-label="Subject"><textarea class="in" rows="8" data-bi="${i}" data-bf="body" aria-label="Email body">${esc(it.body)}</textarea>${it.note?`<p class="hint" style="margin:0">${esc(it.note)}</p>`:""}</div>`;}).join("")}
-      <p class="hint" style="margin:0">${p.resume?.url?`Your resume (${esc(p.resume.name||"PDF")}) attaches to each first email.`:"No resume attaches yet. On the Resumes tab, press Attach to cold emails."}</p></div></div>`;
+      <p class="hint" style="margin:0">${mailKey()==="outlook"?"Outlook drafts can't carry attachments from here. Attach your resume to each first email in Outlook before you send.":p.resume?.url?`Your resume (${esc(p.resume.name||"PDF")}) attaches to each first email.`:"No resume attaches yet. On the Resumes tab, press Attach to cold emails."}</p></div></div>`;
   }
   const ready=readyList(S.o.guesses), readyAll=readyList(true);
   const {sent:sentToday,room}=coldRoom(cs,sod);
@@ -1128,12 +1135,12 @@ function updateOutreach(){
   const fus=fuDue(now);
   const done=cs.filter(c=>c.stage==="fu2"&&nextAction(c,now)?.due<=now);
   html+=`<div class="card"><div class="card-h"><div><div class="eyebrow">Follow-ups</div><h3>${fus.length?`${fus.length} due`:"None due"}</h3></div><div class="btn-row">${fus.length?`<button class="btn" data-act="writeFollowups" ${S.bulk?"disabled":""}>Write ${fus.length} follow-up${fus.length>1?"s":""}</button>`:""}${done.length?`<button class="btn ghost" data-act="closeOut">Close out ${done.length} with no reply</button>`:""}</div></div>
-    <div class="card-b">${fus.length?`<div class="mini">${fus.slice(0,10).map(x=>`<button class="mini-row" data-act="open" data-id="${esc(x.c.id)}"><span>${esc(x.c.name)}</span><span class="faint mono">${esc(x.a.kind==="fu2"?"final nudge":"follow-up")} · ${tPlus(x.c.emailedAt)}</span></button>`).join("")}</div>`:`<p class="muted" style="margin:0;font-size:13px">Follow-ups come due ${p.followUpDays} days after each email with no reply. They go in the same Gmail thread.</p>`}</div></div>`;
+    <div class="card-b">${fus.length?`<div class="mini">${fus.slice(0,10).map(x=>`<button class="mini-row" data-act="open" data-id="${esc(x.c.id)}"><span>${esc(x.c.name)}</span><span class="faint mono">${esc(x.a.kind==="fu2"?"final nudge":"follow-up")} · ${tPlus(x.c.emailedAt)}</span></button>`).join("")}</div>`:`<p class="muted" style="margin:0;font-size:13px">Follow-ups come due ${p.followUpDays} days after each email with no reply. They go in the same ${M().name} thread.</p>`}</div></div>`;
   // replies and calls
   const hot=cs.filter(c=>["replied","scheduled","talked"].includes(c.stage)).sort((a,b)=>(nextAction(a,now)?.due||0)-(nextAction(b,now)?.due||0));
   const talked=hot.filter(c=>c.stage==="talked");
   html+=`<div class="card"><div class="card-h"><div><div class="eyebrow">Replies and calls</div><h3>${hot.length?`${hot.length} active`:"None yet"}</h3></div>${talked.length?`<button class="btn" data-act="writeThanks" ${S.bulk?"disabled":""}>Write ${talked.length} thank-you${talked.length>1?"s":""}</button>`:""}</div>
-    <div class="card-b">${hot.length?`<div class="mini">${hot.map(c=>{const a=nextAction(c,now);return `<button class="mini-row" data-act="open" data-id="${esc(c.id)}"><span>${esc(c.name)} <span class="faint">· ${esc(firmOf(c)?.name||c.firm||"")}</span></span><span class="faint">${esc(a?.label||"")}${a?.due!=null?` · ${dueText(a.due)}`:""}</span></button>`;}).join("")}</div>`:`<p class="muted" style="margin:0;font-size:13px">When someone replies, Check Gmail moves them here. Set the call time in their file and Claude preps you.</p>`}</div></div>`;
+    <div class="card-b">${hot.length?`<div class="mini">${hot.map(c=>{const a=nextAction(c,now);return `<button class="mini-row" data-act="open" data-id="${esc(c.id)}"><span>${esc(c.name)} <span class="faint">· ${esc(firmOf(c)?.name||c.firm||"")}</span></span><span class="faint">${esc(a?.label||"")}${a?.due!=null?` · ${dueText(a.due)}`:""}</span></button>`;}).join("")}</div>`:`<p class="muted" style="margin:0;font-size:13px">When someone replies, Check ${M().name} moves them here. Set the call time in their file and Claude preps you.</p>`}</div></div>`;
   main.innerHTML=html;
   const lr=S.lastRun, s=lr?.summary||{};
   const emailed=cs.filter(c=>c.emailedAt).length, replied=cs.filter(c=>c.repliedAt||["replied","scheduled","talked","thanked","advocate"].includes(c.stage)).length;
@@ -1152,25 +1159,25 @@ async function writeBatch(items){
   const b=bulkStart("Writing emails",items.length); let n=0;
   for(const it of items){ if(b.stop) break;
     const c=S.contacts[it.id]; if(!c){ bulkStep(); continue; }
-    try{ const d=(it.kind==="fu1"||it.kind==="fu2")?followupTemplate(c,it.kind):await writeEmail(it.id,it.kind,true);
+    try{ const d=(it.kind==="fu1"||it.kind==="fu2")?followupTemplate(c,it.kind):(c.draft?.prepared&&c.draft.kind===it.kind&&c.draft.body)?c.draft:await writeEmail(it.id,it.kind,true);
       if(d){ S.batch=S.batch.filter(x=>x.id!==it.id); S.batch.push({id:it.id,kind:it.kind,subject:d.subject,body:d.body,note:d.note||""}); n++; } }
     catch(e){ toast(sampleErr(e),"crit"); if(/not_granted|sampling|rate_limited|no_sample|not_declared/.test(e?.code||"")) break; }
     bulkStep(c.name); if(S.tab==="outreach") updateOutreach();
   }
-  bulkEnd(n?`${n} email${n===1?"":"s"} ready. Review them, then save to Gmail.`:"");
+  bulkEnd(n?`${n} email${n===1?"":"s"} ready. Review them, then save to ${M().name}.`:"");
   if(S.tab!=="outreach") setTab("outreach"); else updateOutreach();
 }
 async function saveBatch(){
   const items=[...S.batch]; if(!items.length) return;
-  const b=bulkStart("Saving to Gmail drafts",items.length); let ok=0; const left=[];
+  const b=bulkStart(`Saving to ${M().name} drafts`,items.length); let ok=0; const left=[];
   for(let i=0;i<items.length;i++){ const it=items[i];
     if(b.stop){ left.push(...items.slice(i)); break; }
     S.kind[it.id]=it.kind; S.drafts[it.id+":"+it.kind]={kind:it.kind,subject:it.subject,body:it.body,note:it.note};
-    try{ if(await gmailDraft(it.id,true)) ok++; else left.push(it); }
-    catch(e){ toast(errText(e,"Gmail"),"crit"); left.push(it); if(/needs_reauth|server_not|not_in_manifest|no_mcp|blocked/.test(e?.code||"")){ left.push(...items.slice(i+1)); break; } }
+    try{ if(await mailDraft(it.id,true)) ok++; else left.push(it); }
+    catch(e){ toast(errText(e,M().name),"crit"); left.push(it); if(/needs_reauth|server_not|not_in_manifest|no_mcp|blocked/.test(e?.code||"")){ left.push(...items.slice(i+1)); break; } }
     bulkStep(S.contacts[it.id]?.name);
   }
-  S.batch=left; bulkEnd(); toast(`${ok} saved to Gmail drafts.${ok?" Open Gmail to read and send them.":""}${left.length?` ${left.length} still here.`:""}`,ok?"ok":"warn"); updateOutreach();
+  S.batch=left; bulkEnd(); toast(`${ok} saved to ${M().name} drafts.${ok?` Open ${M().name} to read and send them${mailKey()==="outlook"?", and attach your resume to first emails":""}.`:""}${left.length?` ${left.length} still here.`:""}`,ok?"ok":"warn",ok?M().drafts:undefined); updateOutreach();
 }
 
 /* ---------- Step 4: Jobs ---------- */
@@ -1699,6 +1706,7 @@ function mountSetup(){
       <label class="lbl full">Availability sentence (Central Time)<textarea class="in" id="sp-avail" rows="2">${esc(p.availability)}</textarea></label>
       <label class="lbl full">Things you share with people (one per line). Claude only claims one when their profile shows it.<textarea class="in" id="sp-ties" rows="5">${esc((p.ties||[]).join("\n"))}</textarea></label>
       <label class="chk full"><input type="checkbox" id="sp-ut" ${p.utSignoff?"checked":""}> Sign off "Best, and Hook 'em!" to UT alumni</label>
+      <label class="lbl">Email account<select class="in" id="sp-mail"><option value="outlook" ${mailKey()==="outlook"?"selected":""}>Outlook (Microsoft 365 connector)</option><option value="gmail" ${mailKey()==="gmail"?"selected":""}>Gmail</option></select></label>
     </div></div></div>
   <div class="card"><div class="card-h"><div><h3>Daily limits</h3><div class="hint" style="margin:2px 0 0">The morning run and the buttons both stay inside these.</div></div></div><div class="card-b form-grid four">
     <label class="lbl">New people per day<input class="in" id="sp-goal" type="number" min="1" max="300" value="${esc(p.dailyLeadGoal)}"></label>
@@ -1730,15 +1738,15 @@ function mountSetup(){
 }
 function updateSetup(){
   const el=$("#spConns"); if(!el) return;
-  const rows=[["Clay","Finds bankers by school and firm, verifies emails"],["Gmail","Saves drafts, tracks sends, replies and bounces"],["Indeed","Job postings, full descriptions, your Indeed resume"]];
-  el.innerHTML=`<div class="legend" style="gap:8px 12px">${rows.map(([n,d])=>{const s=S.conn[n];return `<span><strong>${n}</strong><div class="faint" style="font-size:12px">${d}</div></span><span class="conn"><span class="dot ${s==="ok"?"ok":s==="reauth"?"warn":s==="missing"?"crit":""}"></span>${s==="ok"?"ready":s==="reauth"?"reconnect":s==="missing"?"add in Settings":"…"}</span>`;}).join("")}</div>
+  const rows=[["Clay","Finds bankers by school and firm, verifies emails"],[M().server,`${mailKey()==="outlook"?"Outlook: saves":"Saves"} drafts, tracks sends, replies and bounces`],["Indeed","Job postings, full descriptions, your Indeed resume"]];
+  el.innerHTML=`<div class="legend" style="gap:8px 12px">${rows.map(([n,d])=>{const s=S.conn[n];return `<span><strong>${connLabel(n)}</strong><div class="faint" style="font-size:12px">${d}</div></span><span class="conn"><span class="dot ${s==="ok"?"ok":s==="reauth"?"warn":s==="missing"?"crit":""}"></span>${s==="ok"?"ready":s==="reauth"?"reconnect":s==="missing"?"add in Settings":"…"}</span>`;}).join("")}</div>
   <p class="hint">Add or reconnect connectors in claude.ai Settings → Connectors. ${S.perms?`<button class="btn sm ghost" data-act="perms">Page permissions</button>`:""}</p>`;
   const fn=$("#sp-filenote"); if(fn) fn.textContent=P().resume?.name?`Attaching: ${P().resume.name}`:"Nothing attached yet.";
 }
 function readSetup(){
   const v=id=>($("#"+id)?.value??"").trim(); const lines=id=>v(id).split("\n").map(s=>s.trim()).filter(Boolean); const num=(id,d)=>{ const n=Number(v(id)); return Number.isFinite(n)&&v(id)!==""?n:d; };
   return {name:v("sp-name"),school:v("sp-school"),year:v("sp-year"),gradYear:v("sp-grad"),major:v("sp-major"),focus:v("sp-focus"),availability:v("sp-avail"),ties:lines("sp-ties"),
-    followUpDays:num("sp-fu",6),dailyCap:num("sp-cap",20),dailyLeadGoal:num("sp-goal",50),verifyPerDay:num("sp-ver",15),autoAddJobFirms:!!$("#sp-autofirm")?.checked,utSignoff:!!$("#sp-ut")?.checked,
+    followUpDays:num("sp-fu",6),dailyCap:num("sp-cap",20),dailyLeadGoal:num("sp-goal",50),verifyPerDay:num("sp-ver",15),autoAddJobFirms:!!$("#sp-autofirm")?.checked,utSignoff:!!$("#sp-ut")?.checked,mail:v("sp-mail")==="gmail"?"gmail":"outlook",
     schoolNames:lines("sp-schools"),schoolKeyword:v("sp-kw"),linkedinSchool:v("sp-li")};
 }
 
@@ -1761,7 +1769,7 @@ function renderDrawer(force){
   dr.innerHTML=`<div class="dr-head"><div style="min-width:0"><div class="eyebrow">${esc(f?.name||c.firm||"Firm unknown")}${f?` · ${TYPES[f.type]}`:""}</div><h2>${esc(c.name)}</h2><div class="muted">${esc(c.title||"")}${c.location?` · ${esc(c.location)}`:""}</div></div><button class="icon-btn" data-act="closeDrawer" aria-label="Close">×</button></div>
   <div class="dr-bar"><label class="lbl">Stage<select class="in" data-chg="stage" data-id="${id}">${STAGES.map(s=>`<option value="${s.id}" ${s.id===c.stage?"selected":""}>${s.label}</option>`).join("")}</select></label>
     ${safeUrl(c.linkedin)?`<a class="btn sm" href="${esc(c.linkedin)}" target="_blank" rel="noopener">LinkedIn ↗</a>`:""}
-    ${safeUrl(c.lastDraft?.url)?`<a class="btn sm" href="${esc(c.lastDraft.url)}" target="_blank" rel="noopener">Gmail draft ↗</a>`:""}
+    ${safeUrl(c.lastDraft?.url)?`<a class="btn sm" href="${esc(c.lastDraft.url)}" target="_blank" rel="noopener">${esc(c.lastDraft.via==="outlook"?"Outlook":c.lastDraft.via==="gmail"?"Gmail":M().name)} draft ↗</a>`:""}
     ${c.emailedAt?`<span class="mono faint" style="font-size:12px;padding-bottom:6px">first email ${fmtDate(c.emailedAt)} · ${tPlus(c.emailedAt)}</span>`:""}</div>
   ${a?`<div class="next sev-${a.sev}"><div><div class="eyebrow">Next step</div><strong>${esc(a.label)}</strong> <span class="mono faint">${a.due!=null?dueText(a.due):""}</span></div></div>`:""}
 
@@ -1779,8 +1787,8 @@ function renderDrawer(force){
     <textarea class="in" rows="12" data-draft="body" data-id="${id}" placeholder="The email appears here. Edit anything before saving.">${esc(d?.body||"")}</textarea>
     ${d?.note?`<p class="hint" style="margin:0">${esc(d.note)}</p>`:""}
     ${c.email&&!isVerified(c)&&d?`<div class="banner warn" style="margin:0;font-size:13px">This address is a guess and may bounce. Verify it with Clay first if you can.</div>`:""}
-    <div class="btn-row"><button class="btn primary" data-act="gmailDraft" data-id="${id}" ${!d||!c.email||busy?"disabled":""}>${busy==="gmail"?"Saving…":"Save to Gmail drafts"}</button><button class="btn ghost" data-act="copyDraft" data-id="${id}" ${d?"":"disabled"}>Copy</button></div>
-    <p class="hint" style="margin:0">${first?(tailored?`Attaches your ${esc(f.name)} version (${esc(tailored.pdf?.name||"PDF")}).`:p.resume?.url?`Attaches ${esc(p.resume.name||"your resume")}.`:`No resume attached yet. Make one on the Resumes tab.`):"Goes in the same Gmail thread as your first email."} You send from Gmail.</p>
+    <div class="btn-row"><button class="btn primary" data-act="gmailDraft" data-id="${id}" ${!d||!c.email||busy?"disabled":""}>${busy==="gmail"?"Saving…":`Save to ${M().name} drafts`}</button><button class="btn ghost" data-act="copyDraft" data-id="${id}" ${d?"":"disabled"}>Copy</button></div>
+    <p class="hint" style="margin:0">${first?(mailKey()==="outlook"?"Attach your resume in Outlook before you send.":tailored?`Attaches your ${esc(f.name)} version (${esc(tailored.pdf?.name||"PDF")}).`:p.resume?.url?`Attaches ${esc(p.resume.name||"your resume")}.`:`No resume attached yet. Make one on the Resumes tab.`):`Goes in the same ${M().name} thread as your first email.`} You send from ${M().name}.</p>
   </section>
 
   <section class="dr-sec"><h3>Call</h3>
@@ -1821,9 +1829,10 @@ function contactText(c){
 }
 function defaultSubject(c,kind){
   const p=P(), f=firmOf(c), tr=trackFor(f), firm=f?.name||c.firm||"your firm";
-  const base=`${p.school} ${/bba|finance/i.test(p.major)?"BBA ":""}Interested in ${tr.short} at ${firm}`.replace(/\s+/g," ");
+  const bba=/bba|finance/i.test(p.major)?"BBA ":"";
+  const base=`${p.school} ${bba}Interested in ${tr.short} at ${firm}`.replace(/\s+/g," ");
   if(kind==="referral"&&c.referrer) return `Referred by ${c.referrer} / ${base}`;
-  if(isUT(c)&&/texas|mccombs|ut austin/i.test(p.school)) return `Fellow Longhorn / ${base}`;
+  if(isUT(c)&&/texas|mccombs|ut austin/i.test(p.school)) return `Fellow Longhorn / ${/mccombs/i.test(p.school)?"McCombs":p.school} ${bba}Interested in ${tr.short} at ${firm}`.replace(/\s+/g," ");
   return base;
 }
 function emailPrompt(c,kind){
@@ -1982,25 +1991,47 @@ async function resumeAttachment(c){
   try{ const res=await fetch(r.url); if(!res.ok) throw 0; const buf=await res.arrayBuffer(); const att={content:b64(buf),filename:r.name||"Resume.pdf",mimeType:r.type||"application/pdf"}; resumeCache[r.url]=att; return att; }
   catch{ toast("Couldn't attach your resume. Attach it in Gmail before sending.","warn"); return null; }
 }
-async function gmailDraft(id,quiet){
+/* Outlook bodies go as simple HTML: one <p> per paragraph, <br> for single line breaks. */
+function bodyHTML(t){ return String(t||"").replace(/\r/g,"").trim().split(/\n{2,}/).map(x=>`<p>${esc(x).replace(/\n/g,"<br>")}</p>`).join(""); }
+/* Pull the draft id and web link out of a Microsoft 365 result, whatever its exact shape. */
+function msRef(r){
+  if(r&&typeof r==="object"){ const o=r.draft||r.message||r; const id=o.id||o.messageId||o.draftId||""; const url=o.webLink||o.weblink||o.url||""; if(id||url) return {id:String(id),url:String(url)}; }
+  const t=typeof r==="string"?r:JSON.stringify(r||""); const url=(t.match(/https:\/\/[^\s"'<>]*outlook[^\s"'<>]*/i)||[""])[0]; const id=(t.match(/"?(?:id|messageId)"?\s*[:=]\s*"?([A-Za-z0-9+/=_-]{20,})/)||[])[1]||"";
+  return {id,url};
+}
+async function mailDraft(id,quiet){
   const c=S.contacts[id]; const d=curDraftFor(id); if(!c||!d) return false;
   if(!c.email){ if(!quiet) toast("Add an email address first.","warn"); return false; }
-  const input={to:[c.email],subject:d.subject,body:d.body};
-  const first=d.kind==="cold"||d.kind==="referral";
-  const att=first?await resumeAttachment(c):null; if(att) input.attachments=[att];
-  if(!first&&c.lastMsgId) input.replyToMessageId=c.lastMsgId;
+  const first=d.kind==="cold"||d.kind==="referral", m=M(), outlook=m.key==="outlook";
+  let att=null, ref={id:"",url:""}, warn="";
   setBusy(id,"gmail");
   try{
-    const r=await call("Gmail","create_draft",input);
-    const patch={lastDraft:{kind:d.kind,at:Date.now(),url:r?.viewUrl||"",id:r?.id||""},log:addLog(c,`Saved ${KIND[d.kind].toLowerCase()} to Gmail drafts`)};
+    if(outlook){
+      const html=bodyHTML(d.body);
+      if(!first&&c.lastMsgId&&c.lastVia==="outlook"){
+        /* A reply draft keeps the thread. Replying to your own sent note addresses it to you, so set To afterwards. */
+        ref=msRef(await call(MS,"outlook_create_reply_draft",{messageId:c.lastMsgId,body:html,bodyType:"html"}));
+        if(ref.id){ try{ await call(MS,"outlook_update_draft",{messageId:ref.id,to:[c.email],cc:[]}); }catch{ warn=" Check the To line before you send."; } }
+        else warn=" Check the To line before you send.";
+      } else {
+        ref=msRef(await call(MS,"outlook_create_draft",{to:[c.email],subject:d.subject||defaultSubject(c,d.kind),body:html,bodyType:"html"}));
+      }
+    } else {
+      const input={to:[c.email],subject:d.subject,body:d.body};
+      att=first?await resumeAttachment(c):null; if(att) input.attachments=[att];
+      if(!first&&c.lastMsgId&&c.lastVia!=="outlook") input.replyToMessageId=c.lastMsgId;
+      const r=await call("Gmail","create_draft",input); ref={id:r?.id||"",url:r?.viewUrl||""};
+    }
+    const patch={lastDraft:{kind:d.kind,at:Date.now(),url:ref.url||m.drafts,id:ref.id,via:m.key},log:addLog(c,`Saved ${KIND[d.kind].toLowerCase()} to ${m.name} drafts`)};
     if(first){ patch.subject=d.subject; if(c.stage==="lead"){ patch.stage="drafted"; patch.draftedAt=Date.now(); } }
-    /* Gmail sync can't see thank-yous and check-ins go out, so saving the draft is what moves them along. */
+    /* Mail sync can't see thank-yous and check-ins go out, so saving the draft is what moves them along. */
     if(d.kind==="thanks"&&c.stage==="talked"){ patch.stage="thanked"; patch.thankedAt=Date.now(); }
     if(d.kind==="checkin") patch.checkinAt=Date.now();
     await saveContact(id,patch);
-    if(!quiet) toast(`Draft saved in Gmail${att?" with your resume":""}.`,"ok",r?.viewUrl);
+    if(!quiet) toast(`Draft saved in ${m.name}${att?" with your resume":outlook&&first?". Attach your resume before sending":""}.${warn}`,warn?"warn":"ok",ref.url||m.drafts);
+    else if(warn) toast(`${c.name}: ${warn.trim()}`,"warn");
     return true;
-  }catch(e){ if(!quiet) toast(errText(e,"Gmail"),"crit"); else throw e; return false; }
+  }catch(e){ if(!quiet) toast(errText(e,m.name),"crit"); else throw e; return false; }
   finally{ setBusy(id,null); }
 }
 function curDraftFor(id){ const el=S.open===id?$("#drawer"):null; const d=curDraft(id); if(!el||!d) return d; const s=el.querySelector('[data-draft="subject"]'), b=el.querySelector('[data-draft="body"]'); return {...d,subject:s?.value??d.subject,body:b?.value??d.body}; }
@@ -2046,50 +2077,135 @@ function profilePatch(o){
 }
 
 
-/* ---------- Gmail sync ---------- */
+/* ---------- mail sync (Outlook or Gmail) ---------- */
+const WATCH_STAGES=["lead","drafted","emailed","fu1","fu2"], RESEND_MS=10*60000;
+function syncMail(manual){ return mailKey()==="gmail"?syncGmail(manual):syncOutlook(manual); }
+/* Same rules for both accounts. sent/replies are keyed by contact id; fix maps id -> the address actually used. */
+async function applyMailSync(watch,{sent,replies,bounced,fix,via},label){
+  let nS=0,nR=0,nB=0; const rank={lead:0,drafted:0,emailed:1,fu1:2,fu2:3};
+  for(const c of watch){
+    const patch={}; const lg=t=>{ patch.log=addLog({log:patch.log||c.log},t); };
+    const rp=(replies[c.id]||[]).filter(Boolean).sort((a,b)=>a-b);
+    const used=fix[c.id]; if(used&&used!==c.email.toLowerCase()&&!bounced.has(c.id)){ patch.email=used; lg(`Using ${used}, the address you emailed`); }
+    const e=(patch.email||c.email).toLowerCase();
+    if(bounced.has(c.id)&&!rp.length){
+      const bl=[...new Set([...(c.bounced||[]),e])]; const next=(c.altEmails||[]).find(a=>!bl.includes(a))||guessEmail(c,bl);
+      Object.assign(patch,{bounced:bl,email:next||"",emailSrc:next?"pattern":"",stage:"lead"}); lg(`Bounced: ${e}${next?`. Trying ${next}`:""}`); nB++;
+    } else {
+      /* A resend within 10 minutes (say, to add a forgotten attachment) is the same email. */
+      const s=[]; for(const x of (sent[c.id]||[]).filter(x=>x.at).sort((a,b)=>a.at-b.at)){ if(s.length&&x.at-s[s.length-1].at<RESEND_MS) s[s.length-1]=x; else s.push(x); }
+      if(s.length){ const f0=s[0], l=s[s.length-1];
+        if(!c.emailedAt||f0.at<c.emailedAt) patch.emailedAt=f0.at;
+        if(!c.lastSentAt||l.at>c.lastSentAt||(!c.lastMsgId&&l.at>=c.lastSentAt)){ patch.lastSentAt=l.at; patch.lastMsgId=l.id; patch.threadId=l.threadId||""; patch.lastVia=via; }
+        /* Later checks only look back a few days, so count messages newer than the last one already counted. */
+        const total=(c.sentCount||0)+s.filter(x=>x.at>(c.lastSentAt||0)+RESEND_MS).length;
+        if(total!==(c.sentCount||0)) patch.sentCount=total;
+        if(!c.subject) patch.subject=(l.subject||c.draft?.subject||"").replace(/^(re|fw|fwd):\s*/i,"");
+        const want=total>=3?"fu2":total===2?"fu1":"emailed";
+        if(rank[want]>rank[c.stage]){ patch.stage=want; if(rank[c.stage]===0){ nS++; lg(`Sent from ${label}`); } }
+      }
+      if(rp.length&&(!c.emailedAt||rp[rp.length-1]>=(patch.emailedAt||c.emailedAt)-DAY)){ Object.assign(patch,{stage:"replied",repliedAt:rp[rp.length-1],emailSrc:"replied"}); lg("They replied"); nR++; }
+    }
+    if(!patch.subject) delete patch.subject;
+    if(Object.keys(patch).length) await saveContact(c.id,patch).catch(()=>{});
+  }
+  return {nS,nR,nB};
+}
+function syncStart(manual,label){
+  if(!S.mcp){ if(manual) toast(`${label} works when this page is open in Claude.`,"warn"); return null; }
+  if(S.syncing) return null;
+  const watch=Object.values(S.contacts).filter(c=>c.email&&WATCH_STAGES.includes(c.stage||"lead"));
+  if(!watch.length){ S.lastSync=Date.now(); lsSet("cd.lastSync."+mailKey(),S.lastSync); if(manual) toast(`Nobody to check yet. ${label} tracks people once they have an email.`,"ok"); updateView(); return null; }
+  S.syncing=true; updateView(); return watch;
+}
+function syncDone(manual,label,{nS,nR,nB}){
+  S.lastSync=Date.now(); lsSet("cd.lastSync."+mailKey(),S.lastSync); S.syncing=false; updateView();
+  if(manual||nS||nR||nB) toast(`${label} checked. ${nS} newly sent, ${nR} repl${nR===1?"y":"ies"}, ${nB} bounce${nB===1?"":"s"}.`,nR?"ok":"");
+}
 async function syncGmail(manual){
-  if(!S.mcp){ if(manual) toast("Gmail works when this page is open in Claude.","warn"); return; }
-  if(S.syncing) return;
-  const watch=Object.values(S.contacts).filter(c=>c.email&&["lead","drafted","emailed","fu1","fu2"].includes(c.stage));
-  if(!watch.length){ S.lastSync=Date.now(); lsSet("cd.lastSync",S.lastSync); if(manual) toast("Nobody to check yet. Gmail tracks people once they have an email.","ok"); updateView(); return; }
-  S.syncing=true; updateView();
-  const emails=[...new Set(watch.map(c=>c.email.toLowerCase()))];
+  const watch=syncStart(manual,"Gmail"); if(!watch) return;
+  const byEmail=new Map(watch.map(c=>[c.email.toLowerCase(),c]));
+  const emails=[...byEmail.keys()];
   const sent={}, replies={}, bounced=new Set();
   const ms=m=>Date.parse(m.date)||Number(m.internalDate)||0;
   try{
     for(const ch of chunks(emails,12)){
       const or=ch.join(" OR ");
       const ps=await call("Gmail","search_threads",{query:`in:sent to:(${or}) newer_than:180d`,pageSize:50,view:"THREAD_VIEW_METADATA_ONLY"});
-      for(const t of ps?.threads||[]) for(const m of t.messages||[]){ if(!(m.labelIds||[]).includes("SENT")) continue; for(const r of [...(m.toRecipients||[]),...(m.ccRecipients||[])]){ const e=emailIn(r); if(ch.includes(e)) (sent[e] ||= []).push({at:ms(m),id:m.id,threadId:m.threadId||t.id}); } }
+      for(const t of ps?.threads||[]) for(const m of t.messages||[]){ if(!(m.labelIds||[]).includes("SENT")) continue; for(const r of [...(m.toRecipients||[]),...(m.ccRecipients||[])]){ const e=emailIn(r); if(ch.includes(e)) (sent[byEmail.get(e).id] ||= []).push({at:ms(m),id:m.id,threadId:m.threadId||t.id,subject:m.subject||""}); } }
       const pr=await call("Gmail","search_threads",{query:`from:(${or}) newer_than:180d`,pageSize:50,view:"THREAD_VIEW_METADATA_ONLY"});
-      for(const t of pr?.threads||[]) for(const m of t.messages||[]){ const e=emailIn(m.sender); if(ch.includes(e)) (replies[e] ||= []).push(ms(m)); }
+      for(const t of pr?.threads||[]) for(const m of t.messages||[]){ const e=emailIn(m.sender); if(ch.includes(e)) (replies[byEmail.get(e).id] ||= []).push(ms(m)); }
     }
     const pb=await call("Gmail","search_threads",{query:"from:(mailer-daemon OR postmaster) newer_than:60d",pageSize:50,view:"THREAD_VIEW_MINIMAL"});
-    for(const t of pb?.threads||[]) for(const m of t.messages||[]) for(const e of String((m.snippet||"")+" "+(m.subject||"")).match(EMAIL_RE_G)||[]){ const x=e.toLowerCase(); if(emails.includes(x)) bounced.add(x); }
+    for(const t of pb?.threads||[]) for(const m of t.messages||[]) for(const e of String((m.snippet||"")+" "+(m.subject||"")).match(EMAIL_RE_G)||[]){ const c=byEmail.get(e.toLowerCase()); if(c) bounced.add(c.id); }
   }catch(e){ S.syncing=false; updateView(); if(manual||e?.code!=="not_in_manifest") toast(errText(e,"Gmail"),"crit"); return; }
-  let nS=0,nR=0,nB=0; const rank={lead:0,drafted:0,emailed:1,fu1:2,fu2:3};
-  for(const c of watch){
-    const e=c.email.toLowerCase(); const patch={}; const rp=(replies[e]||[]).filter(Boolean).sort((a,b)=>a-b);
-    if(bounced.has(e)&&!rp.length){
-      const bl=[...new Set([...(c.bounced||[]),e])]; const next=(c.altEmails||[]).find(a=>!bl.includes(a))||guessEmail(c,bl);
-      Object.assign(patch,{bounced:bl,email:next||"",emailSrc:next?"pattern":"",stage:"lead",log:addLog(c,`Bounced: ${e}${next?`. Trying ${next}`:""}`)}); nB++;
-    } else {
-      const s=(sent[e]||[]).filter(x=>x.at).sort((a,b)=>a.at-b.at);
-      if(s.length){ const f0=s[0], l=s[s.length-1];
-        if(!c.emailedAt||f0.at<c.emailedAt) patch.emailedAt=f0.at;
-        if(!c.lastSentAt||l.at>c.lastSentAt){ patch.lastSentAt=l.at; patch.lastMsgId=l.id; patch.threadId=l.threadId; }
-        if(c.sentCount!==s.length) patch.sentCount=s.length;
-        if(!c.subject&&c.lastDraft) patch.subject=c.draft?.subject||"";
-        const want=s.length>=3?"fu2":s.length===2?"fu1":"emailed";
-        if(rank[want]>rank[c.stage]){ patch.stage=want; if(rank[c.stage]===0){ nS++; patch.log=addLog(c,"Sent from Gmail"); } }
-      }
-      if(rp.length&&(!c.emailedAt||rp[rp.length-1]>=(patch.emailedAt||c.emailedAt)-DAY)){ Object.assign(patch,{stage:"replied",repliedAt:rp[rp.length-1],emailSrc:"replied",log:addLog(c,"They replied")}); nR++; }
-    }
-    if(!patch.subject) delete patch.subject;
-    if(Object.keys(patch).length) await saveContact(c.id,patch).catch(()=>{});
+  syncDone(manual,"Gmail",await applyMailSync(watch,{sent,replies,bounced,fix:{},via:"gmail"},"Gmail"));
+}
+/* outlook_email_search answers with one JSON object per message plus a last {nextOffset|nextCursor} item. */
+function msItems(r){
+  const out=new Map(); let next=null, cursor=null;
+  const take=j=>{
+    if(Array.isArray(j)){ for(const x of j) take(x); return; }
+    if(!j||typeof j!=="object") return;
+    if(j.nextOffset!=null&&Number.isFinite(Number(j.nextOffset))) next=Math.max(next??0,Number(j.nextOffset));
+    if(j.nextCursor) cursor=String(j.nextCursor);
+    if(j.id&&("subject" in j||"sender" in j||"recipients" in j)){ out.set(String(j.id),j); return; }
+    for(const v of Object.values(j)) if(v&&typeof v==="object") take(v);
+  };
+  if(r?.structuredContent!=null) take(r.structuredContent);
+  for(const b of r?.content||[]) if(b?.type==="text"){ try{ take(JSON.parse(b.text)); }catch{} }
+  if(!out.size&&r?.payload!=null) take(r.payload);
+  return {items:[...out.values()],next,cursor};
+}
+async function msSearch(input,maxPages=40){
+  const all=new Map(); let offset=0, cursor=null;
+  for(let i=0;i<maxPages;i++){
+    const r=await S.mcp.callTool(MS,"outlook_email_search",cursor?{...input,cursor}:{...input,offset},{cache:false});
+    const {items,next,cursor:cur}=msItems(r);
+    for(const m of items) all.set(String(m.id),m);
+    if(cur&&cur!==cursor){ cursor=cur; continue; }
+    if(!cursor&&next!=null&&next>offset&&next<=1000){ offset=next; continue; }
+    break;
   }
-  S.lastSync=Date.now(); lsSet("cd.lastSync",S.lastSync); S.syncing=false; updateView();
-  if(manual||nS||nR||nB) toast(`Gmail checked. ${nS} newly sent, ${nR} repl${nR===1?"y":"ies"}, ${nB} bounce${nB===1?"":"s"}.`,nR?"ok":"");
+  return [...all.values()];
+}
+/* An address you typed yourself (not the desk's guess) still counts when it names the person at their firm's domain. */
+function matchByName(e,cs){
+  const [local,dom]=String(e).split("@"); if(!dom) return null; const l=normName(local);
+  const hits=cs.filter(c=>{ const cd=(c.email||"").split("@")[1], fd=firmOf(c)?.mail; if(dom!==cd&&dom!==fd) return false;
+    const last=normName(c.last), first=normName(c.first); return last.length>=3&&first&&l.includes(last)&&(l.includes(first)||l.startsWith(first[0])); });
+  return hits.length===1?hits[0]:null;
+}
+const NDR_SUBJ=/^(undeliverable|undelivered|delivery (status notification|has failed)|mail delivery (failed|subsystem)|returned mail)/i;
+const AUTO_SUBJ=/^(automatic reply|auto(matic)?[- ]?reply|auto:|out of (the )?office)/i;
+async function syncOutlook(manual){
+  const watch=syncStart(manual,"Outlook"); if(!watch) return;
+  const now=Date.now(), last=lsGet("cd.lastSync.outlook",0), iso=t=>new Date(t).toISOString();
+  const byEmail=new Map(watch.map(c=>[c.email.toLowerCase(),c]));
+  const sent={}, replies={}, bounced=new Set(), fix={};
+  try{
+    const out=await msSearch({folderName:"Sent Items",afterDateTime:iso(last?last-3*DAY:now-120*DAY),limit:25});
+    for(const m of out){
+      const at=Date.parse(m.sentDateTime||m.receivedDateTime)||0; if(!at) continue;
+      const rc=new Set([...(m.recipients||[]),...(m.namedRecipients||[]).map(x=>x?.address)].map(emailIn).filter(Boolean));
+      for(const e of rc){ let c=byEmail.get(e); if(!c){ c=matchByName(e,watch); if(c){ fix[c.id]=e; byEmail.set(e,c); } } if(!c) continue;
+        (sent[c.id] ||= []).push({at,id:m.id,threadId:m.conversationId||"",subject:m.subject||""}); }
+    }
+    let first=Infinity; for(const c of watch) if(c.emailedAt) first=Math.min(first,c.emailedAt); for(const k in sent) for(const x of sent[k]) first=Math.min(first,x.at);
+    if(first<Infinity){
+      const inbox=await msSearch({folderName:"Inbox",afterDateTime:iso(Math.max(first-DAY,now-60*DAY,last?last-3*DAY:0)),limit:25});
+      for(const m of inbox){
+        const at=Date.parse(m.receivedDateTime||m.sentDateTime)||0, from=emailIn(m.sender), subj=String(m.subject||"");
+        if(NDR_SUBJ.test(subj)||/postmaster|mailer-daemon|microsoftexchange/i.test(from)){
+          for(const e of String((m.summary||"")+" "+subj).match(EMAIL_RE_G)||[]){ const c=byEmail.get(e.toLowerCase()); if(c&&(sent[c.id]?.length||c.emailedAt)) bounced.add(c.id); }
+          continue;
+        }
+        if(AUTO_SUBJ.test(subj)) continue;
+        const c=byEmail.get(from); if(c&&at) (replies[c.id] ||= []).push(at);
+      }
+    }
+  }catch(e){ S.syncing=false; updateView(); if(manual||e?.code!=="not_in_manifest") toast(errText(e,"Outlook"),"crit"); return; }
+  syncDone(manual,"Outlook",await applyMailSync(watch,{sent,replies,bounced,fix,via:"outlook"},"Outlook"));
 }
 
 
@@ -2157,7 +2273,7 @@ async function pasteGo(){
     let d=null;
     if(optWrite){ run(3,"run"); const kind=ref?"referral":"cold"; S.kind[id]=kind; d=await writeEmail(id,kind,true); run(3,d?"done":"fail"); }
     closeModal();
-    if(d){ S.batch=S.batch.filter(x=>x.id!==id); S.batch.unshift({id,kind:d.kind,subject:d.subject,body:d.body,note:d.note||""}); saveBatchLocal(); setTab("outreach"); toast(`${name} added. Review the email, then save it to Gmail.`,"ok"); }
+    if(d){ S.batch=S.batch.filter(x=>x.id!==id); S.batch.unshift({id,kind:d.kind,subject:d.subject,body:d.body,note:d.note||""}); saveBatchLocal(); setTab("outreach"); toast(`${name} added. Review the email, then save it to ${M().name}.`,"ok"); }
     else { openContact(id); toast(`${name} added.`,"ok"); }
   }catch(e){ const i=steps.findIndex(s=>s.st==="run"); if(i>=0) run(i,"fail"); toast(e?.code==="no_mcp"?errText(e,"Connector"):sampleErr(e),"crit"); if($("#pm-go")) $("#pm-go").disabled=false; if(id&&S.contacts[id]){ closeModal(); openContact(id); } }
 }
@@ -2326,7 +2442,7 @@ const ACT = {
   csvParse:()=>csvParse(),
   bulkCommit:()=>bulkCommit(),
   bulkStop:()=>{ if(S.bulk){ S.bulk.stop=true; renderBulk(); } },
-  sync:()=>syncGmail(true),
+  sync:()=>syncMail(true),
   // firms
   firmQuickAdd:async()=>{ const el=$("#fAddName"); const name=(el?.value||"").trim(); if(!name) return toast("Type a firm name.","warn"); const b=$("#fAddBtn"); b.disabled=true; b.textContent="Adding…"; try{ el.value=""; await addFirmAndFind(name,"typed"); }finally{ if($("#fAddBtn")){ $("#fAddBtn").disabled=false; $("#fAddBtn").textContent="Add to list"; } } },
   jobFirmAdd:el=>addFirmAndFind(el.dataset.name,"jobs"),
@@ -2448,7 +2564,7 @@ Return only JSON: {"tellMe":"","whyIB":"","whyPC":"","whyBoutique":"","strength"
   write:el=>{ const id=el.dataset.id; delete S.drafts[id+":"+(S.kind[id]||"cold")]; writeEmail(id,S.kind[id]||"cold"); },
   findEmail:el=>findEmail(el.dataset.id),
   guessOne:async el=>{ const c=S.contacts[el.dataset.id]; const g=guessEmail(c,c.bounced||[]); if(!g) return toast("Need a firm with an email domain and a full last name.","warn"); await saveContact(c.id,{email:g,emailSrc:"pattern"}); },
-  gmailDraft:el=>gmailDraft(el.dataset.id),
+  gmailDraft:el=>mailDraft(el.dataset.id),
   copyDraft:el=>{ const d=curDraftFor(el.dataset.id); if(d) copy(`Subject: ${d.subject}\n\n${d.body}`); },
   prep:el=>prep(el.dataset.id),
   markTalked:async el=>{ const c=S.contacts[el.dataset.id]; S.kind[c.id]="thanks"; await saveContact(c.id,{stage:"talked",talkedAt:Date.now(),log:addLog(c,"Call done")}); toast("Logged. Write the thank-you while it's fresh.","ok"); },
@@ -2516,9 +2632,10 @@ window.addEventListener("beforeunload",e=>{ if(S.res.masterDirty||S.res.tjDirty)
 
 /* ---------- boot ---------- */
 async function checkConns(manual){
-  if(!S.mcp){ for(const n of ["Clay","Gmail","Indeed"]) S.conn[n]="missing"; renderConns(); if(S.tab==="settings") updateSetup(); return; }
+  const all=["Clay","Gmail",MS,"Indeed"];
+  if(!S.mcp){ for(const n of all) S.conn[n]="missing"; renderConns(); if(S.tab==="settings") updateSetup(); return; }
   try{ const r=await S.mcp.listTools(); const by={}; for(const s of r?.servers||[]) by[s.server]=s;
-    for(const n of ["Clay","Gmail","Indeed"]){ const s=by[n]; S.conn[n]=!s?"missing":s.authStatus==="needs_reauth"?"reauth":(s.tools||[]).length?"ok":"missing"; } }
+    for(const n of all){ const s=by[n]; S.conn[n]=!s?"missing":s.authStatus==="needs_reauth"?"reauth":(s.tools||[]).length?"ok":"missing"; } }
   catch{ if(manual) toast("Couldn't read connector status.","warn"); }
   renderConns(); if(S.tab==="settings") updateSetup();
 }
