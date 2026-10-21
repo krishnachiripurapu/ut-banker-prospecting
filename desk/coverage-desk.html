@@ -436,7 +436,7 @@ function classifyJob(title,firm,company){
   return {cat,level};
 }
 const STAGES = [
-  {id:"lead",label:"Lead",g:"reach"},{id:"drafted",label:"Draft saved",g:"reach"},
+  {id:"lead",label:"Lead",g:"reach"},{id:"drafted",label:"Ready to send",g:"reach"},
   {id:"emailed",label:"Emailed",g:"wait"},{id:"fu1",label:"Followed up",g:"wait"},{id:"fu2",label:"Final nudge sent",g:"wait"},
   {id:"replied",label:"Replied",g:"engaged"},{id:"scheduled",label:"Call set",g:"engaged"},
   {id:"talked",label:"Talked",g:"done"},{id:"thanked",label:"Thanked",g:"done"},{id:"advocate",label:"Advocate",g:"done"},
@@ -654,7 +654,7 @@ function nextAction(c,now=Date.now()){
   const fu=(Number(P().followUpDays)||6)*DAY;
   switch(c.stage||"lead"){
     case "lead": return c.email ? (isVerified(c)?{label:"Write the cold email",due:c.createdAt||now,sev:"info",act:"compose",kind:c.referrer?"referral":"cold"}:{label:"Verify the email, then write",due:null,sev:"info",act:"findEmail",kind:c.referrer?"referral":"cold"}) : {label:"Find an email",due:null,sev:"info",act:"findEmail",kind:c.referrer?"referral":"cold"};
-    case "drafted": return {label:`Send your ${M().name} draft`,due:c.draftedAt||now,sev:"warn",act:"gmailLink"};
+    case "drafted": return {label:mailKey()==="outlook"?"Send the email you opened in Outlook":"Send your Gmail draft",due:c.draftedAt||now,sev:"warn",act:"gmailLink"};
     case "emailed": return {label:"Send follow-up 1",due:(c.lastSentAt||c.emailedAt||now)+fu,sev:"warn",act:"compose",kind:"fu1"};
     case "fu1": return {label:"Send the final follow-up",due:(c.lastSentAt||now)+fu,sev:"warn",act:"compose",kind:"fu2"};
     case "fu2": return {label:"No reply. Close it out",due:(c.lastSentAt||now)+fu,sev:"info",act:"close"};
@@ -728,6 +728,11 @@ const mailKey=()=>P().mail==="gmail"?"gmail":"outlook";
 const M=()=>MAIL[mailKey()];
 const MS="Microsoft 365";
 const connLabel=n=>n===MS?"Outlook":n;
+/* Outlook emails open in your own Outlook with the text filled in, so they go out as emails you wrote.
+   Nothing is created through the connector, which tags anything it makes as AI-generated. */
+const OUTLOOK_COMPOSE="https://outlook.office.com/mail/deeplink/compose";
+const enc=v=>encodeURIComponent(String(v||""));
+function composeURL(c,d){ return `${OUTLOOK_COMPOSE}?to=${enc(c.email)}&subject=${enc(d.subject)}&body=${enc(d.body)}`; }
 const OPEN_APP=["Watching","Open"], PREP_APP=["Online test","HireVue","Superday"];
 const TD_SECS=[["first","Do first"],["out","Outreach"],["jobs","Applications"],["setup","Set up"]];
 function fmtMins(m){ m=Math.round(m); if(m<60) return `${m} min`; const h=Math.floor(m/60), r=m%60; return r?`${h} h ${r} min`:`${h} h`; }
@@ -792,13 +797,13 @@ function todayPlan(){
   }
 
   // Outreach
-  if(S.batch.length) add("out",{key:"batch",sev:"warn",mins:S.batch.length,ids:S.batch.map(b=>b.id),title:`Review ${S.batch.length} written email${S.batch.length>1?"s":""} and save them to ${M().name}`,sub:"They're waiting on the Outreach tab.",acts:[{act:"tab",label:"Review",data:{tab:"outreach"}}]});
+  if(S.batch.length) add("out",{key:"batch",sev:"warn",mins:S.batch.length,ids:S.batch.map(b=>b.id),title:`Review ${S.batch.length} written email${S.batch.length>1?"s":""} and ${mailKey()==="outlook"?"open them in Outlook":"save them to Gmail"}`,sub:"They're waiting on the Outreach tab.",acts:[{act:"tab",label:"Review",data:{tab:"outreach"}}]});
   const drafted=cs.filter(c=>!inBatch(c)&&(c.stage==="drafted"||(["emailed","fu1"].includes(c.stage)&&fuPending(c))||(["thanks","checkin"].includes(c.lastDraft?.kind)&&(c.lastDraft.at||0)>=sod)));
-  if(drafted.length) add("out",{key:"drafts",sev:"warn",mins:drafted.length,ids:ids(drafted),title:`Send your ${drafted.length} ${M().name} draft${drafted.length>1?"s":""}`,sub:`${mailKey()==="outlook"?"Attach your resume to each first email, send them from Outlook":"Send them from Gmail"}, then press Check ${M().name} so the desk sees it.`,who:who(drafted),more:more(drafted),acts:[{href:M().drafts,label:`${M().name} drafts`},{act:"sync",label:`Check ${M().name}`}]});
+  if(drafted.length) add("out",{key:"drafts",sev:"warn",mins:drafted.length,ids:ids(drafted),title:mailKey()==="outlook"?`Send the ${drafted.length} email${drafted.length>1?"s":""} you opened in Outlook`:`Send your ${drafted.length} Gmail draft${drafted.length>1?"s":""}`,sub:mailKey()==="outlook"?"A tab you closed without sending waits in Outlook's Drafts folder. Attach your resume to first emails, send, then press Check Outlook so the desk sees it.":"Send them from Gmail, then press Check Gmail so the desk sees it.",who:who(drafted),more:more(drafted),acts:[{href:M().drafts,label:`${M().name} drafts`},{act:"sync",label:`Check ${M().name}`}]});
   const fus=fuDue(now);
   if(fus.length) add("out",{key:"fu",sev:fus.some(x=>x.a.due<sod)?"warn":"",mins:fus.length,ids:fus.map(x=>x.c.id),title:`Write ${fus.length} follow-up${fus.length>1?"s":""}`,sub:`No reply after ${p.followUpDays} days. They go in the same ${M().name} thread.`,who:who(fus.map(x=>x.c)),more:more(fus),acts:[{act:"writeFollowups",label:"Write them"}]});
   const cap=Number(p.dailyCap)||20, {sent,unsent,room}=coldRoom(cs,sod), ready=readyList(S.o.guesses), readyAll=readyList(true);
-  const sentLine=`${sent} of ${cap} sent today${unsent?`, ${unsent} waiting in ${M().name} drafts`:""}`;
+  const sentLine=`${sent} of ${cap} sent today${unsent?`, ${unsent} ${mailKey()==="outlook"?"opened in Outlook, not sent yet":"waiting in Gmail drafts"}`:""}`;
   if(sent>=cap) add("out",{key:"cold",autoDone:true,title:"Send today's cold emails",sub:`${sent} of ${cap} sent today. Goal met.`});
   else if(ready.length&&room){ const n=Math.min(room,ready.length); add("out",{key:"cold",mins:2*n,title:`Write and send ${n} cold email${n>1?"s":""}`,sub:`${sentLine} · ${ready.length} ${S.o.guesses?"people":"verified emails"} ready`,who:who(ready.slice(0,n)),more:Math.max(0,n-8),acts:[{act:"writeCold",label:`Write ${n}`,data:{n}}]}); }
   else if(!ready.length&&readyAll.length&&room) add("out",{key:"cold",mins:2,title:"Pick who to email today",sub:`${readyAll.length} people have only a guessed email so far. Include guesses on Outreach, or wait for the morning run to verify them.`,acts:[{act:"tab",label:"Outreach",data:{tab:"outreach"}}]});
@@ -1106,7 +1111,7 @@ function updatePeople(){
 
 /* ---------- Step 3: Outreach ---------- */
 function mountOutreach(){
-  $("#view").innerHTML=`<div class="section-title"><div><div class="eyebrow">Step 3</div><h2>Outreach</h2><p class="muted lead-p">Write emails for everyone who's ready, review them here, then save them to ${M().name} drafts. You send from ${M().name}.</p></div>
+  $("#view").innerHTML=`<div class="section-title"><div><div class="eyebrow">Step 3</div><h2>Outreach</h2><p class="muted lead-p">Write emails for everyone who's ready, review them here, then ${mailKey()==="outlook"?"open each one in Outlook and send it from there":"save them to Gmail drafts and send from Gmail"}.</p></div>
     <div class="btn-row"><span class="faint mono" style="font-size:11px" id="oSync"></span><button class="btn" data-act="sync" id="oSyncBtn">Check ${M().name}</button></div></div>
   <div class="grid2"><div class="stack" id="oMain"></div><div class="stack" id="oSide"></div></div>`;
 }
@@ -1118,10 +1123,10 @@ function updateOutreach(){
   // review batch (shown first while it exists)
   let html="";
   if(S.batch.length){
-    html+=`<div class="card"><div class="card-h"><div><div class="eyebrow">Review</div><h3>${S.batch.length} email${S.batch.length>1?"s":""} ready to save</h3></div><div class="btn-row"><button class="btn primary" data-act="batchSave" ${S.bulk?"disabled":""}>Save all to ${M().name} drafts</button><button class="btn ghost" data-act="batchDiscard">Discard all</button></div></div>
-    <div class="card-b stack" style="gap:14px">${S.batch.map((it,i)=>{const c=S.contacts[it.id]||{}; return `<div class="batch-item"><div class="section-title" style="margin:0"><div style="min-width:0"><strong>${esc(c.name||"")}</strong> <span class="faint">· ${esc(firmOf(c)?.name||c.firm||"")} · ${esc(KIND[it.kind])}</span><div class="sub mono" style="overflow-wrap:anywhere">${esc(c.email||"")} ${emailBadge(c)}</div></div><button class="btn sm ghost" data-act="batchRemove" data-i="${i}">Remove</button></div>
+    html+=`<div class="card"><div class="card-h"><div><div class="eyebrow">Review</div><h3>${S.batch.length} email${S.batch.length>1?"s":""} ready to ${mailKey()==="outlook"?"send":"save"}</h3></div><div class="btn-row">${mailKey()==="outlook"?"":`<button class="btn primary" data-act="batchSave" ${S.bulk?"disabled":""}>Save all to Gmail drafts</button>`}<button class="btn ghost" data-act="batchDiscard">Discard all</button></div></div>
+    <div class="card-b stack" style="gap:14px">${S.batch.map((it,i)=>{const c=S.contacts[it.id]||{}; return `<div class="batch-item"><div class="section-title" style="margin:0"><div style="min-width:0"><strong>${esc(c.name||"")}</strong> <span class="faint">· ${esc(firmOf(c)?.name||c.firm||"")} · ${esc(KIND[it.kind])}</span><div class="sub mono" style="overflow-wrap:anywhere">${esc(c.email||"")} ${emailBadge(c)}</div></div><div class="btn-row">${mailKey()==="outlook"&&c.email?`<a class="btn sm primary" data-compose data-bi="${i}" href="${esc(MAIL.outlook.drafts)}" target="_blank" rel="noopener">Open in Outlook ↗</a>`:""}<button class="btn sm ghost" data-act="batchRemove" data-i="${i}">Remove</button></div></div>
       <input class="in" data-bi="${i}" data-bf="subject" value="${esc(it.subject)}" aria-label="Subject"><textarea class="in" rows="8" data-bi="${i}" data-bf="body" aria-label="Email body">${esc(it.body)}</textarea>${it.note?`<p class="hint" style="margin:0">${esc(it.note)}</p>`:""}</div>`;}).join("")}
-      <p class="hint" style="margin:0">${mailKey()==="outlook"?"Outlook drafts can't carry attachments from here. Attach your resume to each first email in Outlook before you send.":p.resume?.url?`Your resume (${esc(p.resume.name||"PDF")}) attaches to each first email.`:"No resume attaches yet. On the Resumes tab, press Attach to cold emails."}</p></div></div>`;
+      <p class="hint" style="margin:0">${mailKey()==="outlook"?"Open each one in Outlook, attach your resume to first emails, and send. An email leaves this list once you open it. If one opens blank, sign in to Outlook and click again, or copy it from the person's file.":p.resume?.url?`Your resume (${esc(p.resume.name||"PDF")}) attaches to each first email.`:"No resume attaches yet. On the Resumes tab, press Attach to cold emails."}</p></div></div>`;
   }
   const ready=readyList(S.o.guesses), readyAll=readyList(true);
   const {sent:sentToday,room}=coldRoom(cs,sod);
@@ -1164,7 +1169,7 @@ async function writeBatch(items){
     catch(e){ toast(sampleErr(e),"crit"); if(/not_granted|sampling|rate_limited|no_sample|not_declared/.test(e?.code||"")) break; }
     bulkStep(c.name); if(S.tab==="outreach") updateOutreach();
   }
-  bulkEnd(n?`${n} email${n===1?"":"s"} ready. Review them, then save to ${M().name}.`:"");
+  bulkEnd(n?`${n} email${n===1?"":"s"} ready. Review them, then ${mailKey()==="outlook"?"open each one in Outlook":"save them to Gmail"}.`:"");
   if(S.tab!=="outreach") setTab("outreach"); else updateOutreach();
 }
 async function saveBatch(){
@@ -1787,8 +1792,8 @@ function renderDrawer(force){
     <textarea class="in" rows="12" data-draft="body" data-id="${id}" placeholder="The email appears here. Edit anything before saving.">${esc(d?.body||"")}</textarea>
     ${d?.note?`<p class="hint" style="margin:0">${esc(d.note)}</p>`:""}
     ${c.email&&!isVerified(c)&&d?`<div class="banner warn" style="margin:0;font-size:13px">This address is a guess and may bounce. Verify it with Clay first if you can.</div>`:""}
-    <div class="btn-row"><button class="btn primary" data-act="gmailDraft" data-id="${id}" ${!d||!c.email||busy?"disabled":""}>${busy==="gmail"?"Saving…":`Save to ${M().name} drafts`}</button><button class="btn ghost" data-act="copyDraft" data-id="${id}" ${d?"":"disabled"}>Copy</button></div>
-    <p class="hint" style="margin:0">${first?(mailKey()==="outlook"?"Attach your resume in Outlook before you send.":tailored?`Attaches your ${esc(f.name)} version (${esc(tailored.pdf?.name||"PDF")}).`:p.resume?.url?`Attaches ${esc(p.resume.name||"your resume")}.`:`No resume attached yet. Make one on the Resumes tab.`):`Goes in the same ${M().name} thread as your first email.`} You send from ${M().name}.</p>
+    <div class="btn-row">${mailKey()==="outlook"?(d&&c.email?`<a class="btn primary" data-compose data-id="${id}" href="${esc(MAIL.outlook.drafts)}" target="_blank" rel="noopener">Open in Outlook ↗</a>`:`<button class="btn primary" disabled>Open in Outlook</button>`):`<button class="btn primary" data-act="gmailDraft" data-id="${id}" ${!d||!c.email||busy?"disabled":""}>${busy==="gmail"?"Saving…":"Save to Gmail drafts"}</button>`}<button class="btn ghost" data-act="copyDraft" data-id="${id}" ${d?"":"disabled"}>Copy</button></div>
+    <p class="hint" style="margin:0">${mailKey()==="outlook"?(first?"Opens a new email in your Outlook with this text filled in, so it goes out as an email you wrote. Attach your resume, send, then press Check Outlook. If it opens blank, sign in to Outlook and click again, or use Copy.":"Opens a new email with a Re: subject, so Outlook groups it with your first note. Send it, then press Check Outlook."):first?(tailored?`Attaches your ${esc(f.name)} version (${esc(tailored.pdf?.name||"PDF")}).`:p.resume?.url?`Attaches ${esc(p.resume.name||"your resume")}.`:`No resume attached yet. Make one on the Resumes tab.`):"Goes in the same Gmail thread as your first email."}${mailKey()==="outlook"?"":" You send from Gmail."}</p>
   </section>
 
   <section class="dr-sec"><h3>Call</h3>
@@ -1991,48 +1996,45 @@ async function resumeAttachment(c){
   try{ const res=await fetch(r.url); if(!res.ok) throw 0; const buf=await res.arrayBuffer(); const att={content:b64(buf),filename:r.name||"Resume.pdf",mimeType:r.type||"application/pdf"}; resumeCache[r.url]=att; return att; }
   catch{ toast("Couldn't attach your resume. Attach it in Gmail before sending.","warn"); return null; }
 }
-/* Outlook bodies go as simple HTML: one <p> per paragraph, <br> for single line breaks. */
-function bodyHTML(t){ return String(t||"").replace(/\r/g,"").trim().split(/\n{2,}/).map(x=>`<p>${esc(x).replace(/\n/g,"<br>")}</p>`).join(""); }
-/* Pull the draft id and web link out of a Microsoft 365 result, whatever its exact shape. */
-function msRef(r){
-  if(r&&typeof r==="object"){ const o=r.draft||r.message||r; const id=o.id||o.messageId||o.draftId||""; const url=o.webLink||o.weblink||o.url||""; if(id||url) return {id:String(id),url:String(url)}; }
-  const t=typeof r==="string"?r:JSON.stringify(r||""); const url=(t.match(/https:\/\/[^\s"'<>]*outlook[^\s"'<>]*/i)||[""])[0]; const id=(t.match(/"?(?:id|messageId)"?\s*[:=]\s*"?([A-Za-z0-9+/=_-]{20,})/)||[])[1]||"";
-  return {id,url};
-}
+/* Gmail drafts through the connector. Outlook uses composeClick below instead. */
 async function mailDraft(id,quiet){
+  if(mailKey()==="outlook"){ if(!quiet) toast("Use Open in Outlook in the person's file.","warn"); return false; }
   const c=S.contacts[id]; const d=curDraftFor(id); if(!c||!d) return false;
   if(!c.email){ if(!quiet) toast("Add an email address first.","warn"); return false; }
-  const first=d.kind==="cold"||d.kind==="referral", m=M(), outlook=m.key==="outlook";
-  let att=null, ref={id:"",url:""}, warn="";
+  const first=d.kind==="cold"||d.kind==="referral";
+  const input={to:[c.email],subject:d.subject,body:d.body};
+  const att=first?await resumeAttachment(c):null; if(att) input.attachments=[att];
+  if(!first&&c.lastMsgId&&c.lastVia!=="outlook") input.replyToMessageId=c.lastMsgId;
   setBusy(id,"gmail");
   try{
-    if(outlook){
-      const html=bodyHTML(d.body);
-      if(!first&&c.lastMsgId&&c.lastVia==="outlook"){
-        /* A reply draft keeps the thread. Replying to your own sent note addresses it to you, so set To afterwards. */
-        ref=msRef(await call(MS,"outlook_create_reply_draft",{messageId:c.lastMsgId,body:html,bodyType:"html"}));
-        if(ref.id){ try{ await call(MS,"outlook_update_draft",{messageId:ref.id,to:[c.email],cc:[]}); }catch{ warn=" Check the To line before you send."; } }
-        else warn=" Check the To line before you send.";
-      } else {
-        ref=msRef(await call(MS,"outlook_create_draft",{to:[c.email],subject:d.subject||defaultSubject(c,d.kind),body:html,bodyType:"html"}));
-      }
-    } else {
-      const input={to:[c.email],subject:d.subject,body:d.body};
-      att=first?await resumeAttachment(c):null; if(att) input.attachments=[att];
-      if(!first&&c.lastMsgId&&c.lastVia!=="outlook") input.replyToMessageId=c.lastMsgId;
-      const r=await call("Gmail","create_draft",input); ref={id:r?.id||"",url:r?.viewUrl||""};
-    }
-    const patch={lastDraft:{kind:d.kind,at:Date.now(),url:ref.url||m.drafts,id:ref.id,via:m.key},log:addLog(c,`Saved ${KIND[d.kind].toLowerCase()} to ${m.name} drafts`)};
+    const r=await call("Gmail","create_draft",input);
+    const patch={lastDraft:{kind:d.kind,at:Date.now(),url:r?.viewUrl||"",id:r?.id||"",via:"gmail"},log:addLog(c,`Saved ${KIND[d.kind].toLowerCase()} to Gmail drafts`)};
     if(first){ patch.subject=d.subject; if(c.stage==="lead"){ patch.stage="drafted"; patch.draftedAt=Date.now(); } }
     /* Mail sync can't see thank-yous and check-ins go out, so saving the draft is what moves them along. */
     if(d.kind==="thanks"&&c.stage==="talked"){ patch.stage="thanked"; patch.thankedAt=Date.now(); }
     if(d.kind==="checkin") patch.checkinAt=Date.now();
     await saveContact(id,patch);
-    if(!quiet) toast(`Draft saved in ${m.name}${att?" with your resume":outlook&&first?". Attach your resume before sending":""}.${warn}`,warn?"warn":"ok",ref.url||m.drafts);
-    else if(warn) toast(`${c.name}: ${warn.trim()}`,"warn");
+    if(!quiet) toast(`Draft saved in Gmail${att?" with your resume":""}.`,"ok",r?.viewUrl);
     return true;
-  }catch(e){ if(!quiet) toast(errText(e,m.name),"crit"); else throw e; return false; }
+  }catch(e){ if(!quiet) toast(errText(e,"Gmail"),"crit"); else throw e; return false; }
   finally{ setBusy(id,null); }
+}
+/* Open in Outlook: build the link at click time from what's on screen (edits included), record it, and let the browser open the tab. */
+function composeClick(a,e){
+  const bi=a.dataset.bi, it=bi!=null?S.batch[Number(bi)]:null, id=it?it.id:a.dataset.id, c=S.contacts[id];
+  const d=it?{kind:it.kind,subject:it.subject,body:it.body,note:it.note||""}:curDraftFor(id);
+  if(!c||!d||!c.email||!String(d.body||"").trim()){ e.preventDefault(); toast(c&&!c.email?"Add an email address first.":"Write the email first.","warn"); return; }
+  a.href=composeURL(c,d);
+  setTimeout(()=>markOpened(id,d,it),0);
+}
+async function markOpened(id,d,it){
+  if(it){ S.batch=S.batch.filter(x=>x!==it); saveBatchLocal(); if(S.tab==="outreach") updateOutreach(); }
+  const c=S.contacts[id]; if(!c) return; const first=d.kind==="cold"||d.kind==="referral";
+  const patch={lastDraft:{kind:d.kind,at:Date.now(),url:MAIL.outlook.drafts,id:"",via:"outlook-compose"},log:addLog(c,`Opened ${KIND[d.kind].toLowerCase()} in Outlook to send`)};
+  if(first){ patch.subject=d.subject; patch.draft={kind:d.kind,subject:d.subject,body:d.body,note:d.note||""}; if((c.stage||"lead")==="lead"){ patch.stage="drafted"; patch.draftedAt=Date.now(); } }
+  if(d.kind==="thanks"&&c.stage==="talked"){ patch.stage="thanked"; patch.thankedAt=Date.now(); }
+  if(d.kind==="checkin") patch.checkinAt=Date.now();
+  await saveContact(id,patch).catch(()=>{});
 }
 function curDraftFor(id){ const el=S.open===id?$("#drawer"):null; const d=curDraft(id); if(!el||!d) return d; const s=el.querySelector('[data-draft="subject"]'), b=el.querySelector('[data-draft="body"]'); return {...d,subject:s?.value??d.subject,body:b?.value??d.body}; }
 async function prep(id){
@@ -2273,7 +2275,7 @@ async function pasteGo(){
     let d=null;
     if(optWrite){ run(3,"run"); const kind=ref?"referral":"cold"; S.kind[id]=kind; d=await writeEmail(id,kind,true); run(3,d?"done":"fail"); }
     closeModal();
-    if(d){ S.batch=S.batch.filter(x=>x.id!==id); S.batch.unshift({id,kind:d.kind,subject:d.subject,body:d.body,note:d.note||""}); saveBatchLocal(); setTab("outreach"); toast(`${name} added. Review the email, then save it to ${M().name}.`,"ok"); }
+    if(d){ S.batch=S.batch.filter(x=>x.id!==id); S.batch.unshift({id,kind:d.kind,subject:d.subject,body:d.body,note:d.note||""}); saveBatchLocal(); setTab("outreach"); toast(`${name} added. Review the email, then ${mailKey()==="outlook"?"open it in Outlook":"save it to Gmail"}.`,"ok"); }
     else { openContact(id); toast(`${name} added.`,"ok"); }
   }catch(e){ const i=steps.findIndex(s=>s.st==="run"); if(i>=0) run(i,"fail"); toast(e?.code==="no_mcp"?errText(e,"Connector"):sampleErr(e),"crit"); if($("#pm-go")) $("#pm-go").disabled=false; if(id&&S.contacts[id]){ closeModal(); openContact(id); } }
 }
@@ -2610,6 +2612,7 @@ const INP = {
 };
 async function copy(text){ try{ await navigator.clipboard.writeText(text); toast("Copied.","ok"); }catch{ toast("Copy blocked here. Select the text and copy it manually.","warn"); } }
 
+document.addEventListener("click",e=>{ const a=e.target.closest("a[data-compose]"); if(a) composeClick(a,e); },true);
 document.addEventListener("click",e=>{ const el=e.target.closest("[data-act]"); if(!el) return; if(el.tagName==="A"&&!el.dataset.act) return; const fn=ACT[el.dataset.act]; if(fn){ if(el.tagName==="BUTTON"||el.tagName==="A") e.preventDefault(); fn(el,e); } });
 document.addEventListener("change",e=>{ const el=e.target.closest("[data-chg]"); if(el&&CHG[el.dataset.chg]) CHG[el.dataset.chg](el,e);
   const fld=e.target.closest("[data-field]"); if(fld){ const id=fld.dataset.id, k=fld.dataset.field; const c=S.contacts[id]; if(!c) return; let v=fld.value;
