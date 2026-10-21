@@ -1123,10 +1123,10 @@ function updateOutreach(){
   // review batch (shown first while it exists)
   let html="";
   if(S.batch.length){
-    html+=`<div class="card"><div class="card-h"><div><div class="eyebrow">Review</div><h3>${S.batch.length} email${S.batch.length>1?"s":""} ready to ${mailKey()==="outlook"?"send":"save"}</h3></div><div class="btn-row">${mailKey()==="outlook"?"":`<button class="btn primary" data-act="batchSave" ${S.bulk?"disabled":""}>Save all to Gmail drafts</button>`}<button class="btn ghost" data-act="batchDiscard">Discard all</button></div></div>
+    html+=`<div class="card"><div class="card-h"><div><div class="eyebrow">Review</div><h3>${S.batch.length} email${S.batch.length>1?"s":""} ready to ${mailKey()==="outlook"?"send":"save"}</h3></div><div class="btn-row">${mailKey()==="outlook"?`<button class="btn primary" data-act="openAll">Open all ${S.batch.length} in Outlook</button><a class="btn" data-compose data-bi="0" href="${esc(MAIL.outlook.drafts)}" target="_blank" rel="noopener">Open next ↗</a>`:`<button class="btn primary" data-act="batchSave" ${S.bulk?"disabled":""}>Save all to Gmail drafts</button>`}<button class="btn ghost" data-act="batchDiscard">Discard all</button></div></div>
     <div class="card-b stack" style="gap:14px">${S.batch.map((it,i)=>{const c=S.contacts[it.id]||{}; return `<div class="batch-item"><div class="section-title" style="margin:0"><div style="min-width:0"><strong>${esc(c.name||"")}</strong> <span class="faint">· ${esc(firmOf(c)?.name||c.firm||"")} · ${esc(KIND[it.kind])}</span><div class="sub mono" style="overflow-wrap:anywhere">${esc(c.email||"")} ${emailBadge(c)}</div></div><div class="btn-row">${mailKey()==="outlook"&&c.email?`<a class="btn sm primary" data-compose data-bi="${i}" href="${esc(MAIL.outlook.drafts)}" target="_blank" rel="noopener">Open in Outlook ↗</a>`:""}<button class="btn sm ghost" data-act="batchRemove" data-i="${i}">Remove</button></div></div>
       <input class="in" data-bi="${i}" data-bf="subject" value="${esc(it.subject)}" aria-label="Subject"><textarea class="in" rows="8" data-bi="${i}" data-bf="body" aria-label="Email body">${esc(it.body)}</textarea>${it.note?`<p class="hint" style="margin:0">${esc(it.note)}</p>`:""}</div>`;}).join("")}
-      <p class="hint" style="margin:0">${mailKey()==="outlook"?"Open each one in Outlook, attach your resume to first emails, and send. An email leaves this list once you open it. If one opens blank, sign in to Outlook and click again, or copy it from the person's file.":p.resume?.url?`Your resume (${esc(p.resume.name||"PDF")}) attaches to each first email.`:"No resume attaches yet. On the Resumes tab, press Attach to cold emails."}</p></div></div>`;
+      <p class="hint" style="margin:0">${mailKey()==="outlook"?"Open all puts each email in its own Outlook tab; Open next opens them one per click. Attach your resume to first emails and send. An email leaves this list once it opens. If your browser blocks the tabs, allow pop-ups for claude.ai (the icon at the right of the address bar) and click Open all again. If one opens blank, sign in to Outlook and click again, or copy it from the person's file.":p.resume?.url?`Your resume (${esc(p.resume.name||"PDF")}) attaches to each first email.`:"No resume attaches yet. On the Resumes tab, press Attach to cold emails."}</p></div></div>`;
   }
   const ready=readyList(S.o.guesses), readyAll=readyList(true);
   const {sent:sentToday,room}=coldRoom(cs,sod);
@@ -2027,6 +2027,23 @@ function composeClick(a,e){
   a.href=composeURL(c,d);
   setTimeout(()=>markOpened(id,d,it),0);
 }
+/* Open every email in the review list in its own Outlook tab. Browsers often allow only one new tab per click,
+   so stop at the first blocked tab, keep the rest in the list, and say how to allow pop-ups. */
+function openAllCompose(){
+  const items=S.batch.slice(0,25); let opened=0, blocked=false, skipped=0;
+  for(const it of items){
+    const c=S.contacts[it.id]; if(!c?.email||!String(it.body||"").trim()){ skipped++; continue; }
+    const d={kind:it.kind,subject:it.subject,body:it.body,note:it.note||""};
+    let w=null; try{ w=window.open(composeURL(c,d),"_blank"); }catch{ w=null; }
+    if(!w){ blocked=true; break; }
+    try{ w.opener=null; }catch{}
+    opened++; markOpened(it.id,d,it);
+  }
+  const left=S.batch.length;
+  if(blocked) toast(opened?`Opened ${opened}. Your browser blocked the rest. Allow pop-ups for claude.ai (the icon at the right of the address bar), then click Open all again, or use Open next.`:"Your browser blocked the new tabs. Allow pop-ups for claude.ai (the icon at the right of the address bar), then click Open all again, or use Open next.","warn");
+  else if(opened) toast(`Opened ${opened} email${opened===1?"":"s"} in Outlook. Attach your resume to first emails, send, then press Check Outlook.${left>0?` ${left} still in the list.`:""}`,"ok");
+  else if(skipped) toast("Nothing to open. Each email needs an address and a body.","warn");
+}
 async function markOpened(id,d,it){
   if(it){ S.batch=S.batch.filter(x=>x!==it); saveBatchLocal(); if(S.tab==="outreach") updateOutreach(); }
   const c=S.contacts[id]; if(!c) return; const first=d.kind==="cold"||d.kind==="referral";
@@ -2490,6 +2507,7 @@ const ACT = {
   tdApplied:async el=>{ if(!S.db) return toast(NO_DB,"warn"); const ok=el.dataset.app?(await saveApp(el.dataset.app,{status:"Applied",appliedAt:Date.now()}))===true:el.dataset.key?await trackJob(el.dataset.key,"Applied"):false; if(ok) toast("Marked applied. It's under Tracked on the Jobs tab.","ok"); },
   closeOut:async()=>{ const now=Date.now(); const list=Object.values(S.contacts).filter(c=>c.stage==="fu2"&&nextAction(c,now)?.due<=now); for(const c of list) await saveContact(c.id,{stage:"closed",log:addLog(c,"Closed after two follow-ups")}).catch(()=>{}); toast(`Closed ${list.length}.`,""); },
   batchSave:()=>saveBatch(),
+  openAll:()=>openAllCompose(),
   batchDiscard:()=>{ S.batch=[]; saveBatchLocal(); updateOutreach(); },
   batchRemove:el=>{ S.batch.splice(Number(el.dataset.i),1); saveBatchLocal(); updateOutreach(); },
   // jobs
