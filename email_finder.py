@@ -79,7 +79,7 @@ def ascii_lower(s):
 
 def split_name(full):
     """Return (first, last) as lowercase ascii, or None if the surname is an initial."""
-    s = re.sub(r"\(.*?\)", " ", full)  # drop "(Mengjing)"-style nicknames
+    s = re.sub(r"\(.*?\)", " ", full)  # drop "(Wei)"-style nicknames
     s = s.split(",")[0]  # drop ", CFA" etc.
     tokens = [t for t in re.sub(r"[^a-z\s'-]", " ", ascii_lower(s)).split() if t not in CREDENTIALS]
     tokens = [t.replace("'", "").replace("-", "") for t in tokens]
@@ -404,7 +404,7 @@ def main():
         alts = [f"{guess(q, *name)}@{domain}" for q, _ in pats[firm].most_common(3)[1:] if q != "other"]
         # acquired firms: also offer the parent's domain (Greenhill -> mizuhogroup.com)
         alts += [f"{guess(p, *name)}@{d}" for d in FIRM_DOMAINS.get(firm, []) if d != domain]
-        nick = re.search(r"\((\w+)\)", r["Name"])  # e.g. Barbara (Mengjing) He
+        nick = re.search(r"\((\w+)\)", r["Name"])  # e.g. Jane (Wei) Doe
         if nick:
             alts.insert(0, f"{guess(p, ascii_lower(nick.group(1)), name[1])}@{domain}")
         r["Alt Guess"] = "; ".join(dict.fromkeys(a for a in alts if a != r["Email"]))
