@@ -492,7 +492,7 @@ const S = {
   /* The first visit of each day opens on Today. */
   tab:(()=>{ let canLS=true; try{ localStorage.getItem("cd.tab"); }catch{ canLS=false; } if(canLS&&lsGet("cd.tabDay","")!==dayKeyOf()) return "today"; const h=(location.hash||"").slice(1); if(TAB_IDS.includes(h)) return h; const t=lsGet("cd.tab","today"); return TAB_IDS.includes(t)?t:"today";})(),
   open:null, kind:{}, drafts:{}, busy:{}, confirmDel:null, confirmBulkDel:false, sel:new Set(),
-  batch:(()=>{const b=lsGet("cd.batch",[]);return Array.isArray(b)?b.filter(x=>x&&x.id&&typeof x.body==="string"):[];})(), o:{guesses:false},
+  batch:(()=>{const b=lsGet("cd.batch",[]);return Array.isArray(b)?b.filter(x=>x&&x.id&&typeof x.body==="string"):[];})(), o:{guesses:lsGet("cd.guesses",true)!==false},
   pfind:{scope:"alumni",running:false},
   pf:{q:"",firm:"",email:"all"},
   jobs:{presets:new Set(["ib-sa","pc-sa"]),locs:new Set(["New York, NY","Houston, TX","Dallas, TX"]),results:[],running:false,errs:[],view:"ibpc",firm:"",pulling:false,pullErrs:[],searchOpen:false},
@@ -2657,7 +2657,7 @@ const CHG = {
   pfFirm:el=>{ S.pf.firm=el.value; updatePeople(); },
   selAll:el=>{ filteredPeople().slice(0,600).forEach(c=>el.checked?S.sel.add(c.id):S.sel.delete(c.id)); updatePeople(); },
   selRow:el=>{ el.checked?S.sel.add(el.dataset.id):S.sel.delete(el.dataset.id); updatePeople(); },
-  oGuesses:el=>{ S.o.guesses=el.checked; updateOutreach(); },
+  oGuesses:el=>{ S.o.guesses=el.checked; lsSet("cd.guesses",el.checked); updateOutreach(); },
   jFirm:el=>{ S.jobs.firm=el.value; updateJobs(); },
   jobStatus:async el=>{ const j=jobByKey(el.dataset.key); if(!j) return; const id="j-"+hashKey(j.key);
     if(!el.value){ if(S.apps[id]&&S.db){ delete S.apps[id]; dataChanged(); await S.db.collection("apps").doc(id).delete().catch(e=>toast(dbErr(e),"crit")); } return; }
