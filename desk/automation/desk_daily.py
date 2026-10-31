@@ -12,7 +12,7 @@ DB_DIR   ArtifactData `list` dumps made with out_dir:
          DB_DIR/contacts/*.json, DB_DIR/targets/*.json, DB_DIR/config/*.json, DB_DIR/jobs/*.json
 WORK/inputs.jsonl
          one line per connector result the session saved to a file:
-         {"kind": "outlook_sent" | "outlook_inbox" | "gmail_sent" | "gmail_reply" | "gmail_bounce" | "clay" | "clay_any" | "clay_lookup" | "clay_verify"
+         {"kind": "outlook_sent" | "outlook_inbox" | "gmail_sent" | "gmail_reply" | "gmail_bounce" | "clay" | "clay_tx" | "clay_any" | "clay_lookup" | "clay_verify"
                   | "indeed" | "indeed_open", "path": "...", "firm_id": "<indeed only>", "chunk": <clay_lookup/clay_verify only>}
 apply writes WORK/writes/*.json (one document or patch each) and WORK/writes.json:
          [{"op": "set" | "update", "collection": ..., "doc_id": ..., "file_path": ..., "existing": bool}]
@@ -402,12 +402,15 @@ def q(s):
     return '"' + re.sub(r'["\\]', "", str(s)) + '"'
 
 
-def build_dsl(profile, alumni=True):
+def build_dsl(profile, alumni=True, names=None):
     titles = f"experiences.any(is_current = true and job_title is_similar_to ({', '.join(q(t) for t in TITLES)}))"
     if not alumni:
         return f"select from people where {titles}"
-    names = [n for n in profile.get("schoolNames") or [] if n]
-    kw = profile.get("schoolKeyword") or ""
+    if names is not None:  # an explicit school list (the Texas-college search) skips the home-school keyword
+        kw = ""
+    else:
+        names = [n for n in profile.get("schoolNames") or [] if n]
+        kw = profile.get("schoolKeyword") or ""
     edu = []
     if names:
         edu.append(f"school_name in ({', '.join(q(n) for n in names)})")
@@ -474,12 +477,20 @@ def plan(db_dir):
     added_today = sum(1 for c in d.contacts.values() if (c.get("createdAt") or 0) >= sod)
     quota = max(0, int(d.profile.get("dailyLeadGoal") or 50) - added_today)
     targets = sorted([f for f in d.firms if f["on"] and f.get("domain")], key=lambda f: (d.count[f["id"]], f["name"]))
-    batches, fallback = [], []
+    batches, fallback, texas = [], [], []
     if quota:
         dsl = build_dsl(d.profile)
         for i in range(0, min(len(targets), MAX_CLAY_BATCHES * 10), 10):
             ch = targets[i:i + 10]
             batches.append({"firm_ids": [f["id"] for f in ch], "companyIdentifiers": [f["domain"] for f in ch], "dslQuery": dsl})
+        # Alumni of other Texas colleges: a separate search, because Clay results do not say which school someone attended.
+        home = {n.lower() for n in d.profile.get("schoolNames") or []}
+        tx_names = [n for n in d.profile.get("texasSchools") or [] if n and n.lower() not in home]
+        if tx_names:
+            tx_dsl = build_dsl(d.profile, names=tx_names)
+            for i in range(0, min(len(targets), MAX_CLAY_BATCHES * 10), 10):
+                ch = targets[i:i + 10]
+                texas.append({"firm_ids": [f["id"] for f in ch], "companyIdentifiers": [f["domain"] for f in ch], "dslQuery": tx_dsl})
         any_dsl = build_dsl(d.profile, alumni=False)
         for i in range(0, min(len(targets), MAX_FALLBACK_BATCHES * 10), 10):
             ch = targets[i:i + 10]
@@ -501,7 +512,7 @@ def plan(db_dir):
 
     open_jobs = [{"search": s, "location": loc, "country_code": "US"} for s, loc in OPEN_SEARCHES]
     return {"now": now, "mail": mail, "watched_emails": len(watch), "outlook": outlook, "gmail": gmail,
-            "clay": {"quota": quota, "batches": batches, "fallback_batches": fallback},
+            "clay": {"quota": quota, "batches": batches, "texas_batches": texas, "fallback_batches": fallback},
             "verify": verify, "indeed": indeed, "indeed_open": open_jobs}
 
 
@@ -548,8 +559,8 @@ def apply(db_dir, work):
             for t in threads:
                 for m in t.get("messages", []):
                     bounced.update(emails_in(f"{m.get('snippet', '')} {m.get('subject', '')}"))
-        elif kind in ("clay", "clay_any") and isinstance(data, dict):
-            clay_payloads.append((data, kind == "clay"))
+        elif kind in ("clay", "clay_tx", "clay_any") and isinstance(data, dict):
+            clay_payloads.append((data, {"clay": "home", "clay_tx": "texas"}.get(kind, "")))
         elif kind == "clay_lookup" and isinstance(data, dict):
             lookups[int(inp.get("chunk") or 0)] = data
         elif kind == "clay_verify" and isinstance(data, dict):
@@ -723,11 +734,13 @@ def apply(db_dir, work):
         first, last = split_name(c["name"])
         doc = {"name": c["name"], "first": first, "last": last, "firm": c.get("latest_experience_company") or f["name"], "firmId": f["id"],
                "title": c.get("latest_experience_title") or "", "location": c.get("location_name") or "", "linkedin": c.get("url") or "",
-               "startedRole": c.get("latest_experience_start_date") or "", "school": school if alum else "",
-               "ties": [f"{d.profile.get('school')} alum"] if alum else [],
-               "stage": "lead", "source": "Daily Clay search" if alum else "Daily Clay banker search", "clayTask": task or "",
+               "startedRole": c.get("latest_experience_start_date") or "", "school": school if alum == "home" else "",
+               # Texas-college people get no school claim: the search does not say which Texas school they attended.
+               "ties": [f"{d.profile.get('school')} alum"] if alum == "home" else (["Texas college alum (school unconfirmed)"] if alum == "texas" else []),
+               "stage": "lead", "clayTask": task or "",
+               "source": {"home": "Daily Clay search", "texas": "Daily Clay Texas-college search"}.get(alum, "Daily Clay banker search"),
                "clayEntity": str(c.get("entityId") or c.get("profile_id") or ""),
-               "createdAt": now + i, "log": [{"t": now, "d": "Added by the daily update (" + ("alumni" if alum else "banker") + " search)"}]}
+               "createdAt": now + i, "log": [{"t": now, "d": "Added by the daily update (" + {"home": "alumni", "texas": "Texas-college alumni"}.get(alum, "banker") + " search)"}]}
         g = d.guess_email(doc)
         if g:
             doc.update(email=g, emailSrc="pattern")
