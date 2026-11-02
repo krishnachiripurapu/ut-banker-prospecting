@@ -473,7 +473,7 @@ const DEFAULT_PROFILE = {
   name:"", school:"UT Austin McCombs", schoolNames:["The University of Texas at Austin","The University of Texas at Austin - Red McCombs School of Business","McCombs School of Business"],
   schoolKeyword:"McCombs", linkedinSchool:"university-of-texas-at-austin", year:"Sophomore", gradYear:"", major:"Finance",
   focus:"investment banking and private credit", ties:["UT Austin / McCombs"], availability:"",
-  followUpDays:6, dailyCap:20, dailyLeadGoal:50, verifyPerDay:15, autoAddJobFirms:true, resumeText:"", masterText:"", resume:null, utSignoff:true,
+  followUpDays:6, dailyCap:20, perFirmDay:2, perFirmWeek:5, dailyLeadGoal:50, verifyPerDay:15, autoAddJobFirms:true, resumeText:"", masterText:"", resume:null, utSignoff:true,
 };
 const DAY = 864e5;
 const EMAIL_RE = /[A-Z0-9._%+'-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
@@ -675,7 +675,20 @@ function emailStatus(c){ if(!c.email) return (c.bounced||[]).length?"Bounced":"N
 function emailBadge(c){ const s=emailStatus(c); const cls={Verified:"v",Guessed:"g",Bounced:"x",None:"x"}[s]; const txt={Verified:"verified",Guessed:"guess",Bounced:"bounced",None:"no email"}[s]; return `<span class="src ${cls}">${txt}</span>`; }
 function hashKey(s){ let h=5381; for(const ch of String(s)) h=((h<<5)+h+ch.charCodeAt(0))|0; return (h>>>0).toString(36); }
 /* People with a prepared email go first, in the order of the sending plan; then the usual order. */
-function readyList(includeGuesses){ return Object.values(S.contacts).filter(c=>(c.stage||"lead")==="lead"&&c.email&&(includeGuesses||isVerified(c))&&!S.batch.some(b=>b.id===c.id)).sort((a,b)=>(a.draft?.prepared?a.queue??1e9:1e9)-(b.draft?.prepared?b.queue??1e9:1e9)||(b.ties||[]).length-(a.ties||[]).length||(a.createdAt||0)-(b.createdAt||0)); }
+function readyList(includeGuesses){ return spreadByFirm(Object.values(S.contacts).filter(c=>(c.stage||"lead")==="lead"&&c.email&&(includeGuesses||isVerified(c))&&!S.batch.some(b=>b.id===c.id)).sort((a,b)=>(a.draft?.prepared?a.queue??1e9:1e9)-(b.draft?.prepared?b.queue??1e9:1e9)||(b.ties||[]).length-(a.ties||[]).length||(a.createdAt||0)-(b.createdAt||0))); }
+// Keep cold emails spread across firms: at most perFirmDay new emails to one firm per day and perFirmWeek over 7 days,
+// counting what was already sent, opened in the mail app, or written into today's review list. Picks rotate firm by firm.
+function firmKey(c){ const f=firmOf(c); return f?.id||String(c.firm||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()||("_"+c.id); }
+function spreadByFirm(list){
+  const p=P(), perDay=Math.max(1,Number(p.perFirmDay)||2), perWeek=Math.max(perDay,Number(p.perFirmWeek)||5), sod=startOfDay(), wk=Date.now()-7*864e5;
+  const day={}, week={}, bump=(o,k)=>{o[k]=(o[k]||0)+1;};
+  for(const c of Object.values(S.contacts)){ const t=Math.max(c.emailedAt||0,c.firstSentAt||0,c.stage==="drafted"?(c.draftedAt||0):0); if(!t||c.stage==="lead") continue; const k=firmKey(c); if(t>=sod) bump(day,k); if(t>=wk) bump(week,k); }
+  for(const b of S.batch){ const c=S.contacts[b.id]; if(c&&(b.kind==="cold"||b.kind==="referral")){ const k=firmKey(c); bump(day,k); bump(week,k); } }
+  const groups=new Map(); for(const c of list){ const k=firmKey(c); if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(c); }
+  const out=[]; let more=true;
+  while(more){ more=false;
+    for(const [k,g] of groups){ if(!g.length||(day[k]||0)>=perDay||(week[k]||0)>=perWeek) continue; out.push(g.shift()); bump(day,k); bump(week,k); more=true; } }
+  return out; }
 function dueList(){ const now=Date.now(); return Object.values(S.contacts).filter(c=>{ if(!["emailed","fu1","fu2","replied","scheduled","talked"].includes(c.stage)) return false; const a=nextAction(c,now); return a&&a.due!=null&&a.due<=now+DAY; }); }
 function counts(){
   const cs=Object.values(S.contacts); const on=FIRMS.filter(f=>f.on);
@@ -1717,6 +1730,8 @@ function mountSetup(){
     <label class="lbl">New people per day<input class="in" id="sp-goal" type="number" min="1" max="300" value="${esc(p.dailyLeadGoal)}"></label>
     <label class="lbl">Emails verified per day<input class="in" id="sp-ver" type="number" min="0" max="100" value="${esc(p.verifyPerDay)}"></label>
     <label class="lbl">Cold emails per day<input class="in" id="sp-cap" type="number" min="1" max="60" value="${esc(p.dailyCap)}"></label>
+    <label class="lbl">Most new emails to one firm per day<input class="in" id="sp-firmday" type="number" min="1" max="20" value="${esc(p.perFirmDay??2)}"></label>
+    <label class="lbl">Most new emails to one firm per week<input class="in" id="sp-firmwk" type="number" min="1" max="50" value="${esc(p.perFirmWeek??5)}"></label>
     <label class="lbl">Follow up after (days)<input class="in" id="sp-fu" type="number" min="3" max="14" value="${esc(p.followUpDays)}"></label>
     <label class="chk full"><input type="checkbox" id="sp-autofirm" ${p.autoAddJobFirms!==false?"checked":""}> Each morning, add firms posting IB or credit roles to my wish list (up to 5 a day)</label>
   </div></div>
@@ -1751,7 +1766,7 @@ function updateSetup(){
 function readSetup(){
   const v=id=>($("#"+id)?.value??"").trim(); const lines=id=>v(id).split("\n").map(s=>s.trim()).filter(Boolean); const num=(id,d)=>{ const n=Number(v(id)); return Number.isFinite(n)&&v(id)!==""?n:d; };
   return {name:v("sp-name"),school:v("sp-school"),year:v("sp-year"),gradYear:v("sp-grad"),major:v("sp-major"),focus:v("sp-focus"),availability:v("sp-avail"),ties:lines("sp-ties"),
-    followUpDays:num("sp-fu",6),dailyCap:num("sp-cap",20),dailyLeadGoal:num("sp-goal",50),verifyPerDay:num("sp-ver",15),autoAddJobFirms:!!$("#sp-autofirm")?.checked,utSignoff:!!$("#sp-ut")?.checked,mail:v("sp-mail")==="gmail"?"gmail":"outlook",
+    followUpDays:num("sp-fu",6),dailyCap:num("sp-cap",20),perFirmDay:num("sp-firmday",2),perFirmWeek:num("sp-firmwk",5),dailyLeadGoal:num("sp-goal",50),verifyPerDay:num("sp-ver",15),autoAddJobFirms:!!$("#sp-autofirm")?.checked,utSignoff:!!$("#sp-ut")?.checked,mail:v("sp-mail")==="gmail"?"gmail":"outlook",
     schoolNames:lines("sp-schools"),schoolKeyword:v("sp-kw"),linkedinSchool:v("sp-li")};
 }
 
