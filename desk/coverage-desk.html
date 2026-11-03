@@ -759,6 +759,9 @@ const fuKind=c=>c.stage==="emailed"?"fu1":"fu2";
 /* A follow-up saved as a draft but not sent yet. Mail sync moves the stage once it goes out. */
 const fuPending=c=>c.lastDraft?.kind===fuKind(c)&&(c.lastDraft.at||0)>(c.lastSentAt||c.emailedAt||0);
 function fuDue(now=Date.now()){ return Object.values(S.contacts).filter(c=>["emailed","fu1"].includes(c.stage)&&!inBatch(c)&&!fuPending(c)).map(c=>({c,a:nextAction(c,now)})).filter(x=>x.a&&x.a.due<=now+DAY).sort((x,y)=>x.a.due-y.a.due); }
+// Today's emails: follow-ups that are due go first, then new cold emails fill the rest of the daily limit.
+function todaysMix(ready,room){ const fus=fuDue().slice(0,Math.max(0,room)); return [...fus.map(x=>({id:x.c.id,kind:fuKind(x.c),fu:true})),...ready.slice(0,Math.max(0,room-fus.length)).map(c=>({id:c.id,kind:c.referrer?"referral":"cold"}))]; }
+function mixLabel(m){ const f=m.filter(x=>x.fu).length, n=m.length-f; return f&&n?`${f} follow-up${f>1?"s":""} + ${n} new`:f?`${f} follow-up${f>1?"s":""}`:`${n} new`; }
 function checkinsDue(now=Date.now()){ return Object.values(S.contacts).filter(c=>["thanked","advocate"].includes(c.stage)&&!inBatch(c)&&nextAction(c,now)?.due<=now); }
 /* Today's room under the daily cap: sent today, cold drafts saved today but not sent, and the review list all count. */
 function coldRoom(cs,sod){ const sent=cs.filter(c=>c.emailedAt>=sod||c.lastSentAt>=sod).length, unsent=cs.filter(c=>c.stage==="drafted"&&(c.draftedAt||0)>=sod).length;
@@ -814,11 +817,11 @@ function todayPlan(){
   const drafted=cs.filter(c=>!inBatch(c)&&(c.stage==="drafted"||(["emailed","fu1"].includes(c.stage)&&fuPending(c))||(["thanks","checkin"].includes(c.lastDraft?.kind)&&(c.lastDraft.at||0)>=sod)));
   if(drafted.length) add("out",{key:"drafts",sev:"warn",mins:drafted.length,ids:ids(drafted),title:mailKey()==="outlook"?`Send the ${drafted.length} email${drafted.length>1?"s":""} you opened in Outlook`:`Send your ${drafted.length} Gmail draft${drafted.length>1?"s":""}`,sub:mailKey()==="outlook"?"A tab you closed without sending waits in Outlook's Drafts folder. Attach your resume to first emails, send, then press Check Outlook so the desk sees it.":"Send them from Gmail, then press Check Gmail so the desk sees it.",who:who(drafted),more:more(drafted),acts:[{href:M().drafts,label:`${M().name} drafts`},{act:"sync",label:`Check ${M().name}`}]});
   const fus=fuDue(now);
-  if(fus.length) add("out",{key:"fu",sev:fus.some(x=>x.a.due<sod)?"warn":"",mins:fus.length,ids:fus.map(x=>x.c.id),title:`Write ${fus.length} follow-up${fus.length>1?"s":""}`,sub:`No reply after ${p.followUpDays} days. They go in the same ${M().name} thread.`,who:who(fus.map(x=>x.c)),more:more(fus),acts:[{act:"writeFollowups",label:"Write them"}]});
+  if(fus.length&&!coldRoom(cs,sod).room) add("out",{key:"fu",sev:fus.some(x=>x.a.due<sod)?"warn":"",mins:fus.length,ids:fus.map(x=>x.c.id),title:`Write ${fus.length} follow-up${fus.length>1?"s":""}`,sub:`No reply after ${p.followUpDays} days. They go in the same ${M().name} thread.`,who:who(fus.map(x=>x.c)),more:more(fus),acts:[{act:"writeFollowups",label:"Write them"}]});
   const cap=Number(p.dailyCap)||20, {sent,unsent,room}=coldRoom(cs,sod), ready=readyList(S.o.guesses), readyAll=readyList(true);
   const sentLine=`${sent} of ${cap} sent today${unsent?`, ${unsent} ${mailKey()==="outlook"?"opened in Outlook, not sent yet":"waiting in Gmail drafts"}`:""}`;
   if(sent>=cap) add("out",{key:"cold",autoDone:true,title:"Send today's cold emails",sub:`${sent} of ${cap} sent today. Goal met.`});
-  else if(ready.length&&room){ const n=Math.min(room,ready.length); add("out",{key:"cold",mins:2*n,title:`Write and send ${n} cold email${n>1?"s":""}`,sub:`${sentLine} · ${ready.length} ${S.o.guesses?"people":"verified emails"} ready`,who:who(ready.slice(0,n)),more:Math.max(0,n-8),acts:[{act:"writeCold",label:`Write ${n}`,data:{n}}]}); }
+  else if((ready.length||fus.length)&&room){ const mix=todaysMix(ready,room), n=mix.length, ppl=mix.map(x=>S.contacts[x.id]).filter(Boolean); add("out",{key:"cold",mins:2*n,title:`Write and send today's ${n} email${n>1?"s":""} (${mixLabel(mix)})`,sub:`${sentLine} · ${ready.length} ${S.o.guesses?"people":"verified emails"} ready`,who:who(ppl),more:Math.max(0,n-8),acts:[{act:"writeCold",label:`Write ${n}`,data:{n}}]}); }
   else if(!ready.length&&readyAll.length&&room) add("out",{key:"cold",mins:2,title:"Pick who to email today",sub:`${readyAll.length} people have only a guessed email so far. Include guesses on Outreach, or wait for the morning run to verify them.`,acts:[{act:"tab",label:"Outreach",data:{tab:"outreach"}}]});
   const closeable=cs.filter(c=>c.stage==="fu2"&&nextAction(c,now)?.due<=now);
   if(closeable.length) add("out",{key:"close",mins:1,ids:ids(closeable),title:`Close out ${closeable.length} with no reply`,sub:"Two follow-ups and nothing back. This clears them off your list.",acts:[{act:"closeOut",label:"Close out"}]});
@@ -1143,9 +1146,9 @@ function updateOutreach(){
   }
   const ready=readyList(S.o.guesses), readyAll=readyList(true);
   const {sent:sentToday,room}=coldRoom(cs,sod);
-  const nCold=Math.min(ready.length,room||0);
+  const mixO=todaysMix(ready,room||0), nCold=mixO.length;
   html+=`<div class="card"><div class="card-h"><div><div class="eyebrow">Cold emails</div><h3>${ready.length} ready${!S.o.guesses&&readyAll.length>ready.length?` · ${readyAll.length-ready.length} more with guessed emails`:""}</h3></div>
-    <div class="btn-row"><button class="btn primary" data-act="writeCold" data-n="${nCold}" ${nCold&&!S.bulk?"":"disabled"}>Write ${nCold||""} email${nCold===1?"":"s"}</button></div></div>
+    <div class="btn-row"><button class="btn primary" data-act="writeCold" data-n="${nCold}" ${nCold&&!S.bulk?"":"disabled"}>Write ${nCold||""} email${nCold===1?"":"s"}${nCold?` (${mixLabel(mixO)})`:""}</button></div></div>
     <div class="card-b"><label class="chk"><input type="checkbox" data-chg="oGuesses" ${S.o.guesses?"checked":""}> Include guessed emails (they can bounce)</label>
     <p class="hint">${room?`${room} more today before your daily limit of ${p.dailyCap}.`:`You've hit today's limit of ${p.dailyCap}. Change it in Settings.`} Each email is written from the person's profile in your 5-sentence format.</p>
     ${ready.length?`<div class="mini">${ready.slice(0,8).map(c=>`<button class="mini-row" data-act="open" data-id="${esc(c.id)}"><span>${esc(c.name)}</span><span class="faint">${esc(firmOf(c)?.name||c.firm||"")}</span></button>`).join("")}${ready.length>8?`<span class="faint" style="font-size:12px">and ${ready.length-8} more</span>`:""}</div>`:`<p class="muted" style="margin:6px 0 0;font-size:13px">${readyAll.length?"Verify emails on the People tab, or include guesses.":"Find people or add a list on the People tab."}</p>`}</div></div>`;
@@ -2470,11 +2473,11 @@ function xlsxBlob(sheet,rows,widths,wrapCols=[]){
 /* The review list as a spreadsheet: one row per email, with Approved and Status columns to fill in. */
 async function exportBatchXlsx(){
   if(!S.batch.length) return toast("Nothing in the list to export.","warn");
-  const head=["Name","First name","Firm","Title","To","Subject","Body","Approved","Status","LinkedIn","Body (HTML)"];
+  const head=["Name","First name","Firm","Title","To","Subject","Body","Approved","Status","LinkedIn","Body (HTML)","Type"];
   const rows=[head,...S.batch.map(it=>{ const c=S.contacts[it.id]||{}; const body=String(it.body||"");
     const htmlBody=body.trim().split(/\n{2,}/).map(x=>`<p>${esc(x).replace(/\n/g,"<br>")}</p>`).join("");
-    return [c.name||"",splitName(c.name||"").first||c.first||"",firmOf(c)?.name||c.firm||"",c.title||"",c.email||"",it.subject||"",body,"No","",c.linkedin||"",htmlBody]; })];
-  const blob=xlsxBlob("Emails",rows,[24,12,22,30,34,52,80,10,10,38,40],[6]);
+    return [c.name||"",splitName(c.name||"").first||c.first||"",firmOf(c)?.name||c.firm||"",c.title||"",c.email||"",it.subject||"",body,"No","",c.linkedin||"",htmlBody,{fu1:"Follow-up 1",fu2:"Follow-up 2",referral:"Referral"}[it.kind]||"Cold"]; })];
+  const blob=xlsxBlob("Emails",rows,[24,12,22,30,34,52,80,10,10,38,40,12],[6]);
   const filename=`Cold emails ${S.dayKey||new Date().toISOString().slice(0,10)}.xlsx`;
   if(S.downloads){ try{ await S.downloads.save({filename,data:blob}); toast(`Saved ${rows.length-1} email${rows.length===2?"":"s"} to ${filename}.`,"ok"); return; }catch(e){ if(e?.code==="declined") return; } }
   try{ const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename; document.body.append(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1000); }
@@ -2559,7 +2562,7 @@ const ACT = {
   exportCSV:()=>exportCSV(),
   exportFinder:()=>exportFinder(),
   // outreach
-  writeCold:el=>{ const n=Number(el.dataset.n)||0; const items=readyList(S.o.guesses).slice(0,n).map(c=>({id:c.id,kind:c.referrer?"referral":"cold"})); writeBatch(items); },
+  writeCold:el=>{ const n=Number(el.dataset.n)||0; const items=todaysMix(readyList(S.o.guesses),n).map(({id,kind})=>({id,kind})); writeBatch(items); },
   writeFollowups:()=>writeBatch(fuDue().map(x=>({id:x.c.id,kind:fuKind(x.c)}))),
   writeThanks:()=>writeBatch(Object.values(S.contacts).filter(c=>c.stage==="talked"&&!inBatch(c)).map(c=>({id:c.id,kind:"thanks"}))),
   writeCheckins:()=>writeBatch(checkinsDue().map(c=>({id:c.id,kind:"checkin"}))),
