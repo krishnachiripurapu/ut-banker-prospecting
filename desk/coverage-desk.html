@@ -473,7 +473,7 @@ const DEFAULT_PROFILE = {
   name:"", school:"UT Austin McCombs", schoolNames:["The University of Texas at Austin","The University of Texas at Austin - Red McCombs School of Business","McCombs School of Business"],
   schoolKeyword:"McCombs", linkedinSchool:"university-of-texas-at-austin", year:"Sophomore", gradYear:"", major:"Finance",
   focus:"investment banking and private credit", ties:["UT Austin / McCombs"], availability:"",
-  followUpDays:6, dailyCap:20, perFirmDay:2, perFirmWeek:5, dailyLeadGoal:50, verifyPerDay:15, autoAddJobFirms:true, resumeText:"", masterText:"", resume:null, utSignoff:true,
+  followUpDays:6, dailyCap:20, perFirmDay:2, perFirmWeek:5, publicDailyCap:20, dailyLeadGoal:50, verifyPerDay:15, autoAddJobFirms:true, resumeText:"", masterText:"", resume:null, utSignoff:true,
 };
 const DAY = 864e5;
 const EMAIL_RE = /[A-Z0-9._%+'-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
@@ -675,15 +675,17 @@ function emailStatus(c){ if(!c.email) return (c.bounced||[]).length?"Bounced":"N
 function emailBadge(c){ const s=emailStatus(c); const cls={Verified:"v",Guessed:"g",Bounced:"x",None:"x"}[s]; const txt={Verified:"verified",Guessed:"guess",Bounced:"bounced",None:"no email"}[s]; return `<span class="src ${cls}">${txt}</span>`; }
 function hashKey(s){ let h=5381; for(const ch of String(s)) h=((h<<5)+h+ch.charCodeAt(0))|0; return (h>>>0).toString(36); }
 /* People with a prepared email go first, in the order of the sending plan; then the usual order. */
-function readyList(includeGuesses){ return spreadByFirm(Object.values(S.contacts).filter(c=>(c.stage||"lead")==="lead"&&c.email&&(includeGuesses||isVerified(c))&&!S.batch.some(b=>b.id===c.id)).sort((a,b)=>(a.draft?.prepared?a.queue??1e9:1e9)-(b.draft?.prepared?b.queue??1e9:1e9)||(b.ties||[]).length-(a.ties||[]).length||(a.createdAt||0)-(b.createdAt||0))); }
+const isPub=c=>c?.bracket==="public";
+function readyList(includeGuesses,pub=false,extra=[]){ return spreadByFirm(Object.values(S.contacts).filter(c=>(c.stage||"lead")==="lead"&&c.email&&isPub(c)===pub&&(includeGuesses||isVerified(c))&&!S.batch.some(b=>b.id===c.id)).sort((a,b)=>(a.draft?.prepared?a.queue??1e9:1e9)-(b.draft?.prepared?b.queue??1e9:1e9)||(b.ties||[]).length-(a.ties||[]).length||(a.createdAt||0)-(b.createdAt||0)),extra); }
 // Keep cold emails spread across firms: at most perFirmDay new emails to one firm per day and perFirmWeek over 7 days,
 // counting what was already sent, opened in the mail app, or written into today's review list. Picks rotate firm by firm.
 function firmKey(c){ const f=firmOf(c); return f?.id||String(c.firm||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()||("_"+c.id); }
-function spreadByFirm(list){
+function spreadByFirm(list,extra=[]){
   const p=P(), perDay=Math.max(1,Number(p.perFirmDay)||2), perWeek=Math.max(perDay,Number(p.perFirmWeek)||5), sod=startOfDay(), wk=Date.now()-7*864e5;
   const day={}, week={}, bump=(o,k)=>{o[k]=(o[k]||0)+1;};
   for(const c of Object.values(S.contacts)){ const t=Math.max(c.emailedAt||0,c.firstSentAt||0,c.stage==="drafted"?(c.draftedAt||0):0); if(!t||c.stage==="lead") continue; const k=firmKey(c); if(t>=sod) bump(day,k); if(t>=wk) bump(week,k); }
   for(const b of S.batch){ const c=S.contacts[b.id]; if(c&&(b.kind==="cold"||b.kind==="referral")){ const k=firmKey(c); bump(day,k); bump(week,k); } }
+  for(const c of extra){ const k=firmKey(c); bump(day,k); bump(week,k); }
   const groups=new Map(); for(const c of list){ const k=firmKey(c); if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(c); }
   const out=[]; let more=true;
   while(more){ more=false;
@@ -760,12 +762,21 @@ const fuKind=c=>c.stage==="emailed"?"fu1":"fu2";
 const fuPending=c=>c.lastDraft?.kind===fuKind(c)&&(c.lastDraft.at||0)>(c.lastSentAt||c.emailedAt||0);
 function fuDue(now=Date.now()){ return Object.values(S.contacts).filter(c=>["emailed","fu1"].includes(c.stage)&&!inBatch(c)&&!fuPending(c)).map(c=>({c,a:nextAction(c,now)})).filter(x=>x.a&&x.a.due<=now+DAY).sort((x,y)=>x.a.due-y.a.due); }
 // Today's emails: follow-ups that are due go first, then new cold emails fill the rest of the daily limit.
-function todaysMix(ready,room){ const fus=fuDue().slice(0,Math.max(0,room)); return [...fus.map(x=>({id:x.c.id,kind:fuKind(x.c),fu:true})),...ready.slice(0,Math.max(0,room-fus.length)).map(c=>({id:c.id,kind:c.referrer?"referral":"cold"}))]; }
-function mixLabel(m){ const f=m.filter(x=>x.fu).length, n=m.length-f; return f&&n?`${f} follow-up${f>1?"s":""} + ${n} new`:f?`${f} follow-up${f>1?"s":""}`:`${n} new`; }
+function todaysMix(){ const cs=Object.values(S.contacts), sod=startOfDay(), room=coldRoom(cs,sod).room, pr=pubRoom(cs,sod).room;
+  const fus=fuDue().slice(0,room), main=readyList(S.o.guesses).slice(0,Math.max(0,room-fus.length)), pub=readyList(S.o.guesses,true,main).slice(0,pr), cold=c=>({id:c.id,kind:c.referrer?"referral":"cold"});
+  return [...fus.map(x=>({id:x.c.id,kind:fuKind(x.c),fu:true})),...main.map(cold),...pub.map(c=>({...cold(c),pub:true}))]; }
+function mixLabel(m){ const f=m.filter(x=>x.fu).length, u=m.filter(x=>x.pub).length, n=m.length-f-u;
+  return [f&&`${f} follow-up${f>1?"s":""}`,n&&`${n} new`,u&&`${u} public-college`].filter(Boolean).join(" + "); }
 function checkinsDue(now=Date.now()){ return Object.values(S.contacts).filter(c=>["thanked","advocate"].includes(c.stage)&&!inBatch(c)&&nextAction(c,now)?.due<=now); }
 /* Today's room under the daily cap: sent today, cold drafts saved today but not sent, and the review list all count. */
-function coldRoom(cs,sod){ const sent=cs.filter(c=>c.emailedAt>=sod||c.lastSentAt>=sod).length, unsent=cs.filter(c=>c.stage==="drafted"&&(c.draftedAt||0)>=sod).length;
-  return {sent,unsent,room:Math.max(0,(Number(P().dailyCap)||20)-sent-unsent-S.batch.length)}; }
+// Two daily budgets: the main one (home school, Texas colleges, anyone else, and all follow-ups) and a separate one for
+// first emails to other public-college alumni.
+const pubCold=(c,sod)=>isPub(c)&&(c.emailedAt||0)>=sod;
+const pubBatch=b=>isPub(S.contacts[b.id])&&(b.kind==="cold"||b.kind==="referral");
+function coldRoom(cs,sod){ const sent=cs.filter(c=>(c.emailedAt>=sod||c.lastSentAt>=sod)&&!pubCold(c,sod)).length, unsent=cs.filter(c=>c.stage==="drafted"&&(c.draftedAt||0)>=sod&&!isPub(c)).length;
+  return {sent,unsent,room:Math.max(0,(Number(P().dailyCap)||20)-sent-unsent-S.batch.filter(b=>!pubBatch(b)).length)}; }
+function pubRoom(cs,sod){ const sent=cs.filter(c=>pubCold(c,sod)).length, unsent=cs.filter(c=>c.stage==="drafted"&&(c.draftedAt||0)>=sod&&isPub(c)).length;
+  return {sent,unsent,room:Math.max(0,(Number(P().publicDailyCap??20)||0)-sent-unsent-S.batch.filter(pubBatch).length)}; }
 /* Tasks seen earlier today that the data has since cleared count as done. Kept per viewer in local storage. */
 function clearedToday(gen){
   const k="cd.seen."+S.dayKey; let seen=lsGet(k,{}); if(!seen||typeof seen!=="object"||Array.isArray(seen)) seen={};
@@ -820,8 +831,8 @@ function todayPlan(){
   if(fus.length&&!coldRoom(cs,sod).room) add("out",{key:"fu",sev:fus.some(x=>x.a.due<sod)?"warn":"",mins:fus.length,ids:fus.map(x=>x.c.id),title:`Write ${fus.length} follow-up${fus.length>1?"s":""}`,sub:`No reply after ${p.followUpDays} days. They go in the same ${M().name} thread.`,who:who(fus.map(x=>x.c)),more:more(fus),acts:[{act:"writeFollowups",label:"Write them"}]});
   const cap=Number(p.dailyCap)||20, {sent,unsent,room}=coldRoom(cs,sod), ready=readyList(S.o.guesses), readyAll=readyList(true);
   const sentLine=`${sent} of ${cap} sent today${unsent?`, ${unsent} ${mailKey()==="outlook"?"opened in Outlook, not sent yet":"waiting in Gmail drafts"}`:""}`;
-  if(sent>=cap) add("out",{key:"cold",autoDone:true,title:"Send today's cold emails",sub:`${sent} of ${cap} sent today. Goal met.`});
-  else if((ready.length||fus.length)&&room){ const mix=todaysMix(ready,room), n=mix.length, ppl=mix.map(x=>S.contacts[x.id]).filter(Boolean); add("out",{key:"cold",mins:2*n,title:`Write and send today's ${n} email${n>1?"s":""} (${mixLabel(mix)})`,sub:`${sentLine} · ${ready.length} ${S.o.guesses?"people":"verified emails"} ready`,who:who(ppl),more:Math.max(0,n-8),acts:[{act:"writeCold",label:`Write ${n}`,data:{n}}]}); }
+  if(sent>=cap&&!todaysMix().length) add("out",{key:"cold",autoDone:true,title:"Send today's cold emails",sub:`${sent} of ${cap} sent today. Goal met.`});
+  else if(todaysMix().length){ const mix=todaysMix(), n=mix.length, ppl=mix.map(x=>S.contacts[x.id]).filter(Boolean); add("out",{key:"cold",mins:2*n,title:`Write and send today's ${n} email${n>1?"s":""} (${mixLabel(mix)})`,sub:`${sentLine} · ${ready.length} ${S.o.guesses?"people":"verified emails"} ready`,who:who(ppl),more:Math.max(0,n-8),acts:[{act:"writeCold",label:`Write ${n}`,data:{n}}]}); }
   else if(!ready.length&&readyAll.length&&room) add("out",{key:"cold",mins:2,title:"Pick who to email today",sub:`${readyAll.length} people have only a guessed email so far. Include guesses on Outreach, or wait for the morning run to verify them.`,acts:[{act:"tab",label:"Outreach",data:{tab:"outreach"}}]});
   const closeable=cs.filter(c=>c.stage==="fu2"&&nextAction(c,now)?.due<=now);
   if(closeable.length) add("out",{key:"close",mins:1,ids:ids(closeable),title:`Close out ${closeable.length} with no reply`,sub:"Two follow-ups and nothing back. This clears them off your list.",acts:[{act:"closeOut",label:"Close out"}]});
@@ -1146,7 +1157,7 @@ function updateOutreach(){
   }
   const ready=readyList(S.o.guesses), readyAll=readyList(true);
   const {sent:sentToday,room}=coldRoom(cs,sod);
-  const mixO=todaysMix(ready,room||0), nCold=mixO.length;
+  const mixO=todaysMix(), nCold=mixO.length;
   html+=`<div class="card"><div class="card-h"><div><div class="eyebrow">Cold emails</div><h3>${ready.length} ready${!S.o.guesses&&readyAll.length>ready.length?` · ${readyAll.length-ready.length} more with guessed emails`:""}</h3></div>
     <div class="btn-row"><button class="btn primary" data-act="writeCold" data-n="${nCold}" ${nCold&&!S.bulk?"":"disabled"}>Write ${nCold||""} email${nCold===1?"":"s"}${nCold?` (${mixLabel(mixO)})`:""}</button></div></div>
     <div class="card-b"><label class="chk"><input type="checkbox" data-chg="oGuesses" ${S.o.guesses?"checked":""}> Include guessed emails (they can bounce)</label>
@@ -1733,6 +1744,7 @@ function mountSetup(){
     <label class="lbl">New people per day<input class="in" id="sp-goal" type="number" min="1" max="300" value="${esc(p.dailyLeadGoal)}"></label>
     <label class="lbl">Emails verified per day<input class="in" id="sp-ver" type="number" min="0" max="100" value="${esc(p.verifyPerDay)}"></label>
     <label class="lbl">Cold emails per day<input class="in" id="sp-cap" type="number" min="1" max="60" value="${esc(p.dailyCap)}"></label>
+    <label class="lbl">Public-college emails per day<input class="in" id="sp-pubcap" type="number" min="0" max="60" value="${esc(p.publicDailyCap??20)}"></label>
     <label class="lbl">Most new emails to one firm per day<input class="in" id="sp-firmday" type="number" min="1" max="20" value="${esc(p.perFirmDay??2)}"></label>
     <label class="lbl">Most new emails to one firm per week<input class="in" id="sp-firmwk" type="number" min="1" max="50" value="${esc(p.perFirmWeek??5)}"></label>
     <label class="lbl">Follow up after (days)<input class="in" id="sp-fu" type="number" min="3" max="14" value="${esc(p.followUpDays)}"></label>
@@ -1769,7 +1781,7 @@ function updateSetup(){
 function readSetup(){
   const v=id=>($("#"+id)?.value??"").trim(); const lines=id=>v(id).split("\n").map(s=>s.trim()).filter(Boolean); const num=(id,d)=>{ const n=Number(v(id)); return Number.isFinite(n)&&v(id)!==""?n:d; };
   return {name:v("sp-name"),school:v("sp-school"),year:v("sp-year"),gradYear:v("sp-grad"),major:v("sp-major"),focus:v("sp-focus"),availability:v("sp-avail"),ties:lines("sp-ties"),
-    followUpDays:num("sp-fu",6),dailyCap:num("sp-cap",20),perFirmDay:num("sp-firmday",2),perFirmWeek:num("sp-firmwk",5),dailyLeadGoal:num("sp-goal",50),verifyPerDay:num("sp-ver",15),autoAddJobFirms:!!$("#sp-autofirm")?.checked,utSignoff:!!$("#sp-ut")?.checked,mail:v("sp-mail")==="gmail"?"gmail":"outlook",
+    followUpDays:num("sp-fu",6),dailyCap:num("sp-cap",20),perFirmDay:num("sp-firmday",2),publicDailyCap:num("sp-pubcap",20),perFirmWeek:num("sp-firmwk",5),dailyLeadGoal:num("sp-goal",50),verifyPerDay:num("sp-ver",15),autoAddJobFirms:!!$("#sp-autofirm")?.checked,utSignoff:!!$("#sp-ut")?.checked,mail:v("sp-mail")==="gmail"?"gmail":"outlook",
     schoolNames:lines("sp-schools"),schoolKeyword:v("sp-kw"),linkedinSchool:v("sp-li")};
 }
 
@@ -2562,7 +2574,7 @@ const ACT = {
   exportCSV:()=>exportCSV(),
   exportFinder:()=>exportFinder(),
   // outreach
-  writeCold:el=>{ const n=Number(el.dataset.n)||0; const items=todaysMix(readyList(S.o.guesses),n).map(({id,kind})=>({id,kind})); writeBatch(items); },
+  writeCold:()=>{ const items=todaysMix().map(({id,kind})=>({id,kind})); writeBatch(items); },
   writeFollowups:()=>writeBatch(fuDue().map(x=>({id:x.c.id,kind:fuKind(x.c)}))),
   writeThanks:()=>writeBatch(Object.values(S.contacts).filter(c=>c.stage==="talked"&&!inBatch(c)).map(c=>({id:c.id,kind:"thanks"}))),
   writeCheckins:()=>writeBatch(checkinsDue().map(c=>({id:c.id,kind:"checkin"}))),

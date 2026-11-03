@@ -12,7 +12,7 @@ DB_DIR   ArtifactData `list` dumps made with out_dir:
          DB_DIR/contacts/*.json, DB_DIR/targets/*.json, DB_DIR/config/*.json, DB_DIR/jobs/*.json
 WORK/inputs.jsonl
          one line per connector result the session saved to a file:
-         {"kind": "outlook_sent" | "outlook_inbox" | "gmail_sent" | "gmail_reply" | "gmail_bounce" | "clay" | "clay_tx" | "clay_any" | "clay_lookup" | "clay_verify"
+         {"kind": "outlook_sent" | "outlook_inbox" | "gmail_sent" | "gmail_reply" | "gmail_bounce" | "clay" | "clay_tx" | "clay_pub" | "clay_any" | "clay_lookup" | "clay_verify"
                   | "indeed" | "indeed_open", "path": "...", "firm_id": "<indeed only>", "chunk": <clay_lookup/clay_verify only>}
 apply writes WORK/writes/*.json (one document or patch each) and WORK/writes.json:
          [{"op": "set" | "update", "collection": ..., "doc_id": ..., "file_path": ..., "existing": bool}]
@@ -474,17 +474,26 @@ def plan(db_dir):
     if watch and mail == "gmail":
         gmail.append({"kind": "gmail_bounce", "query": "from:(mailer-daemon OR postmaster) newer_than:60d", "view": "THREAD_VIEW_MINIMAL"})
 
-    added_today = sum(1 for c in d.contacts.values() if (c.get("createdAt") or 0) >= sod)
+    added_today = sum(1 for c in d.contacts.values() if (c.get("createdAt") or 0) >= sod and c.get("bracket") != "public")
     quota = max(0, int(d.profile.get("dailyLeadGoal") or 50) - added_today)
     targets = sorted([f for f in d.firms if f["on"] and f.get("domain")], key=lambda f: (d.count[f["id"]], f["name"]))
-    batches, fallback, texas = [], [], []
+    batches, fallback, texas, public = [], [], [], []
+    # Other public colleges: their own bracket with their own daily lead goal and send budget.
+    pub_added = sum(1 for c in d.contacts.values() if (c.get("createdAt") or 0) >= sod and c.get("bracket") == "public")
+    pub_quota = max(0, int(d.profile.get("publicLeadGoal") or 0) - pub_added)
+    home = {n.lower() for n in d.profile.get("schoolNames") or []}
+    pub_names = [n for n in d.profile.get("publicSchools") or [] if n and n.lower() not in home]
+    if pub_quota and pub_names:
+        pub_dsl = build_dsl(d.profile, names=pub_names)
+        for i in range(0, min(len(targets), MAX_CLAY_BATCHES * 10), 10):
+            ch = targets[i:i + 10]
+            public.append({"firm_ids": [f["id"] for f in ch], "companyIdentifiers": [f["domain"] for f in ch], "dslQuery": pub_dsl})
     if quota:
         dsl = build_dsl(d.profile)
         for i in range(0, min(len(targets), MAX_CLAY_BATCHES * 10), 10):
             ch = targets[i:i + 10]
             batches.append({"firm_ids": [f["id"] for f in ch], "companyIdentifiers": [f["domain"] for f in ch], "dslQuery": dsl})
         # Alumni of other Texas colleges: a separate search, because Clay results do not say which school someone attended.
-        home = {n.lower() for n in d.profile.get("schoolNames") or []}
         tx_names = [n for n in d.profile.get("texasSchools") or [] if n and n.lower() not in home]
         if tx_names:
             tx_dsl = build_dsl(d.profile, names=tx_names)
@@ -512,7 +521,8 @@ def plan(db_dir):
 
     open_jobs = [{"search": s, "location": loc, "country_code": "US"} for s, loc in OPEN_SEARCHES]
     return {"now": now, "mail": mail, "watched_emails": len(watch), "outlook": outlook, "gmail": gmail,
-            "clay": {"quota": quota, "batches": batches, "texas_batches": texas, "fallback_batches": fallback},
+            "clay": {"quota": quota, "batches": batches, "texas_batches": texas, "fallback_batches": fallback,
+                     "public_quota": pub_quota, "public_batches": public},
             "verify": verify, "indeed": indeed, "indeed_open": open_jobs}
 
 
@@ -559,8 +569,8 @@ def apply(db_dir, work):
             for t in threads:
                 for m in t.get("messages", []):
                     bounced.update(emails_in(f"{m.get('snippet', '')} {m.get('subject', '')}"))
-        elif kind in ("clay", "clay_tx", "clay_any") and isinstance(data, dict):
-            clay_payloads.append((data, {"clay": "home", "clay_tx": "texas"}.get(kind, "")))
+        elif kind in ("clay", "clay_tx", "clay_pub", "clay_any") and isinstance(data, dict):
+            clay_payloads.append((data, {"clay": "home", "clay_tx": "texas", "clay_pub": "public"}.get(kind, "")))
         elif kind == "clay_lookup" and isinstance(data, dict):
             lookups[int(inp.get("chunk") or 0)] = data
         elif kind == "clay_verify" and isinstance(data, dict):
@@ -706,8 +716,10 @@ def apply(db_dir, work):
             patch_contact(cid, patch)
 
     # Clay: new leads, spread across the firms with the fewest people first
-    quota = max(0, int(d.profile.get("dailyLeadGoal") or 50) - sum(1 for c in d.contacts.values() if (c.get("createdAt") or 0) >= day_start(now)))
-    seen, per_firm = set(d.contacts), collections.defaultdict(list)
+    sod_ = day_start(now)
+    quota = max(0, int(d.profile.get("dailyLeadGoal") or 50) - sum(1 for c in d.contacts.values() if (c.get("createdAt") or 0) >= sod_ and c.get("bracket") != "public"))
+    pub_quota = max(0, int(d.profile.get("publicLeadGoal") or 0) - sum(1 for c in d.contacts.values() if (c.get("createdAt") or 0) >= sod_ and c.get("bracket") == "public"))
+    seen, per_firm, pub_firm = set(d.contacts), collections.defaultdict(list), collections.defaultdict(list)
     for p, alum in clay_payloads:
         for c in p.get("contacts") or []:
             company = c.get("latest_experience_company") or ""
@@ -722,13 +734,16 @@ def apply(db_dir, work):
                 summary["skippedTitles"] += 1
                 continue
             seen.add(cid)
-            per_firm[f["id"]].append((cid, c, f, p.get("taskId"), alum))
-    order = sorted(per_firm, key=lambda fid: d.count[fid])
-    picked = []
-    while len(picked) < quota and any(per_firm[f] for f in order):
-        for fid in order:
-            if per_firm[fid] and len(picked) < quota:
-                picked.append(per_firm[fid].pop(0))
+            (pub_firm if alum == "public" else per_firm)[f["id"]].append((cid, c, f, p.get("taskId"), alum))
+
+    def spread(groups, limit):
+        order, out = sorted(groups, key=lambda fid: d.count[fid]), []
+        while len(out) < limit and any(groups[f] for f in order):
+            for fid in order:
+                if groups[fid] and len(out) < limit:
+                    out.append(groups[fid].pop(0))
+        return out
+    picked = spread(per_firm, quota) + spread(pub_firm, pub_quota)
     school = (d.profile.get("schoolNames") or [d.profile.get("school")])[0]
     for i, (cid, c, f, task, alum) in enumerate(picked):
         first, last = split_name(c["name"])
@@ -736,11 +751,11 @@ def apply(db_dir, work):
                "title": c.get("latest_experience_title") or "", "location": c.get("location_name") or "", "linkedin": c.get("url") or "",
                "startedRole": c.get("latest_experience_start_date") or "", "school": school if alum == "home" else "",
                # Texas-college people get no school claim: the search does not say which Texas school they attended.
-               "ties": [f"{d.profile.get('school')} alum"] if alum == "home" else (["Texas college alum (school unconfirmed)"] if alum == "texas" else []),
-               "stage": "lead", "clayTask": task or "",
-               "source": {"home": "Daily Clay search", "texas": "Daily Clay Texas-college search"}.get(alum, "Daily Clay banker search"),
+               "ties": [f"{d.profile.get('school')} alum"] if alum == "home" else (["Texas college alum (school unconfirmed)"] if alum == "texas" else (["Public college alum (school unconfirmed)"] if alum == "public" else [])),
+               "stage": "lead", "clayTask": task or "", "bracket": {"home": "home", "texas": "texas", "public": "public"}.get(alum, "any"),
+               "source": {"home": "Daily Clay search", "texas": "Daily Clay Texas-college search", "public": "Daily Clay public-college search"}.get(alum, "Daily Clay banker search"),
                "clayEntity": str(c.get("entityId") or c.get("profile_id") or ""),
-               "createdAt": now + i, "log": [{"t": now, "d": "Added by the daily update (" + {"home": "alumni", "texas": "Texas-college alumni"}.get(alum, "banker") + " search)"}]}
+               "createdAt": now + i, "log": [{"t": now, "d": "Added by the daily update (" + {"home": "alumni", "texas": "Texas-college alumni", "public": "public-college alumni"}.get(alum, "banker") + " search)"}]}
         g = d.guess_email(doc)
         if g:
             doc.update(email=g, emailSrc="pattern")
